@@ -1,0 +1,240 @@
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Avatar } from "@/components/Avatar";
+import { Header } from "@/components/Header";
+import { Placeholder } from "@/components/Placeholder";
+import { PressableScale } from "@/components/PressableScale";
+import { Verified } from "@/components/Verified";
+import { addPortfolioPhoto } from "@/data/photos";
+import { getMyProfile, getPortfolio, setAvailability } from "@/data/repository";
+import type { PortfolioPhoto, Profile } from "@/data/types";
+import { useResponsive } from "@/lib/responsive";
+import { colors } from "@/theme/colors";
+import { fonts } from "@/theme/fonts";
+
+export default function ProfileScreen() {
+  const { isMobile, contentWidth } = useResponsive();
+  const [me, setMe] = useState<Profile | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioPhoto[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      getMyProfile().then(setMe);
+      getPortfolio("me").then(setPortfolio);
+    }, [])
+  );
+
+  const toggleAvailable = async () => {
+    if (!me) return;
+    const next = await setAvailability(!me.available);
+    setMe({ ...next });
+  };
+
+  const onAddPhoto = async () => {
+    try {
+      setUploading(true);
+      const url = await addPortfolioPhoto();
+      if (url) setPortfolio(await getPortfolio("me"));
+    } catch (e) {
+      console.warn("portfolio upload failed", e);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (!me) {
+    return (
+      <View style={styles.screen}>
+        <Header subtitle={<SectionTitle text="Profile" />} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.screen}>
+      <Header subtitle={<SectionTitle text="Profile" />} />
+      <ScrollView
+        contentContainerStyle={[
+          { paddingBottom: 30 },
+          !isMobile && { maxWidth: contentWidth, width: "100%", alignSelf: "center" },
+        ]}
+      >
+        {/* identity */}
+        <View style={styles.identity}>
+          <Avatar letter={me.fullName[0] ?? "?"} size={66} />
+          <View style={{ flex: 1 }}>
+            <View style={styles.nameRow}>
+              <Text style={styles.name}>{me.fullName}</Text>
+              {me.verified && <Verified />}
+            </View>
+            <Text style={styles.trade}>{me.trade}</Text>
+            <Text style={styles.region}>📍 {me.region}</Text>
+          </View>
+        </View>
+
+        {/* trust badge */}
+        <View style={styles.trustBadge}>
+          <View style={styles.trustScoreCol}>
+            <Text style={styles.trustScore}>{me.trustScore.toFixed(1)}</Text>
+            <Text style={styles.trustStars}>★★★★★</Text>
+          </View>
+          <View style={styles.trustText}>
+            <Text style={styles.trustTitle}>High trust</Text>
+            <Text style={styles.trustBody}>
+              {me.dealsClosed} jobs closed in-app · always shows up · pays/gets paid on time
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.trustNote}>
+          Your score grows with every job closed <Text style={{ fontWeight: "700" }}>inside the app</Text> — both
+          sides, worker and hirer.
+        </Text>
+
+        {/* stats */}
+        <View style={styles.stats}>
+          <Stat n={String(me.yearsExp)} l="years" />
+          <Stat n={me.hoursVerified ? me.hoursVerified.toLocaleString() : "—"} l="verified hrs" hi />
+          <Stat n={String(me.dealsClosed)} l="closed" last />
+        </View>
+        <View style={styles.verifiedHrs}>
+          <Verified />
+          <Text style={styles.verifiedHrsText}>Hours verified by presence (OnSite Timekeeper)</Text>
+        </View>
+
+        {/* availability toggle */}
+        <View style={{ padding: 16 }}>
+          <PressableScale
+            onPress={toggleAvailable}
+            style={[
+              styles.availBtn,
+              { backgroundColor: me.available ? colors.good : colors.inkMid },
+            ]}
+          >
+            <Text style={styles.availText}>
+              {me.available ? "● Available for work" : "○ Not available"}
+            </Text>
+          </PressableScale>
+        </View>
+
+        {/* portfolio */}
+        <View style={styles.portfolioHead}>
+          <Text style={styles.portfolioTitle}>Portfolio</Text>
+          <PressableScale onPress={onAddPhoto} disabled={uploading} hitSlop={8}>
+            <Text style={styles.addPhoto}>{uploading ? "Uploading…" : "+ Add photo"}</Text>
+          </PressableScale>
+        </View>
+        <View style={styles.grid}>
+          {portfolio.map((p) => (
+            <Placeholder key={p.id} photoUrl={p.photoUrl} style={styles.gridItem}>
+              <Text style={styles.gridLabel}>{p.caption}</Text>
+            </Placeholder>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function SectionTitle({ text }: { text: string }) {
+  return <Text style={styles.sectionTitle}>{text}</Text>;
+}
+
+function Stat({ n, l, hi, last }: { n: string; l: string; hi?: boolean; last?: boolean }) {
+  return (
+    <View style={[styles.stat, last && { borderRightWidth: 0 }]}>
+      <Text style={[styles.statN, { color: hi ? colors.safetyInk : colors.ink }]}>{n}</Text>
+      <Text style={styles.statL}>{l}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg },
+  sectionTitle: {
+    fontFamily: fonts.display,
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    color: colors.inkMid,
+  },
+  identity: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "center",
+    padding: 18,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  name: { fontSize: 20, fontWeight: "700", color: colors.ink },
+  trade: { fontSize: 13.5, color: colors.inkMid, marginTop: 2 },
+  region: { fontSize: 12, color: colors.inkLo, marginTop: 2 },
+  trustBadge: {
+    margin: 14,
+    marginBottom: 0,
+    backgroundColor: colors.goodBg,
+    borderWidth: 1,
+    borderColor: colors.goodLine,
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  trustScoreCol: { alignItems: "center" },
+  trustScore: { fontFamily: fonts.display, fontSize: 30, fontWeight: "800", color: colors.good },
+  trustStars: { fontSize: 16, color: colors.good, marginTop: 1 },
+  trustText: { flex: 1, borderLeftWidth: 1, borderLeftColor: colors.goodLine, paddingLeft: 14 },
+  trustTitle: { fontSize: 13, fontWeight: "700", color: "#0a6b41" },
+  trustBody: { fontSize: 11.5, color: "#3c7a5a", marginTop: 2, lineHeight: 16 },
+  trustNote: { paddingHorizontal: 18, paddingTop: 8, fontSize: 10.5, color: colors.inkLo, lineHeight: 15 },
+  stats: {
+    flexDirection: "row",
+    margin: 14,
+    marginBottom: 0,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  stat: { flex: 1, paddingVertical: 13, alignItems: "center", borderRightWidth: 1, borderRightColor: colors.line },
+  statN: { fontFamily: fonts.display, fontSize: 23, fontWeight: "800" },
+  statL: { fontSize: 10, color: colors.inkLo, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.4 },
+  verifiedHrs: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 18, paddingTop: 7 },
+  verifiedHrsText: { fontSize: 11, color: colors.good },
+  availBtn: { borderRadius: 9, paddingVertical: 13, alignItems: "center" },
+  availText: { color: colors.white, fontWeight: "800", fontSize: 14 },
+  portfolioHead: {
+    paddingHorizontal: 18,
+    paddingTop: 4,
+    paddingBottom: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  portfolioTitle: {
+    fontFamily: fonts.display,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: colors.inkMid,
+  },
+  addPhoto: { fontSize: 11, color: colors.blue, fontWeight: "700" },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 14 },
+  gridItem: {
+    width: "48%",
+    aspectRatio: 4 / 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    justifyContent: "flex-end",
+    padding: 9,
+  },
+  gridLabel: { fontSize: 11, color: colors.white, fontWeight: "700", textShadowColor: "rgba(0,0,0,.4)", textShadowRadius: 3 },
+});
