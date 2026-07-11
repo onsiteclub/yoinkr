@@ -4,7 +4,8 @@ import { ensureUserId, supabase } from "./supabase";
 
 // Image pipeline (HANDOFF §2: compress before upload):
 //   pick → resize to ≤1280px wide JPEG @ 75% → upload to Storage bucket
-//   `photos` under {uid}/{timestamp}.jpg → return the public URL.
+//   `yoinkr-photos` under {uid}/{timestamp}.jpg → return the public URL.
+//   (Bucket is prefixed because Storage on onsite-core is holding-wide.)
 // The bucket is public-read; writes are locked to the owner's folder (RLS).
 
 const MAX_WIDTH = 1280;
@@ -32,13 +33,13 @@ export async function pickAndUploadPhoto(): Promise<string | null> {
   const path = `${uid}/${Date.now()}.jpg`;
   const bytes = base64ToBytes(manipulated.base64);
 
-  const { error } = await supabase.storage.from("photos").upload(path, bytes, {
+  const { error } = await supabase.storage.from("yoinkr-photos").upload(path, bytes, {
     contentType: "image/jpeg",
     upsert: false,
   });
   if (error) throw error;
 
-  const { data } = supabase.storage.from("photos").getPublicUrl(path);
+  const { data } = supabase.storage.from("yoinkr-photos").getPublicUrl(path);
   return data.publicUrl;
 }
 

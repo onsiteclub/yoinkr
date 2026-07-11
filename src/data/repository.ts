@@ -1,9 +1,9 @@
 // Data access facade. Every screen reads/writes through these functions.
 //
-// Backed by Supabase (schema in supabase/migrations/). Reads of public data
-// (open listings, profiles, references) work without a session; writes ensure
-// an anonymous session first (see src/data/supabase.ts). Chat is still mock —
-// it moves to Supabase Realtime next.
+// Backed by Supabase (`yoinkr` schema on onsite-core; DDL lives in the
+// onsite-core-db repo). Reads of public data (open listings, profiles,
+// references) work without a session; writes ensure an anonymous session
+// first (see src/data/supabase.ts). Chat runs on Supabase Realtime.
 import type {
   Application,
   ChatSummary,
@@ -445,7 +445,7 @@ export function subscribeToThread(
       "postgres_changes",
       {
         event: "INSERT",
-        schema: "public",
+        schema: "yoinkr",
         table: "messages",
         filter: `conversation_id=eq.${conversationId}`,
       },

@@ -11,6 +11,10 @@ if (!url || !anonKey) {
 }
 
 export const supabase = createClient(url, anonKey, {
+  // All Yoinkr tables live in the `yoinkr` schema on onsite-core; `public` is
+  // empty by holding-wide rule. The schema must be listed under the project's
+  // "Exposed schemas" or every query fails with PGRST106.
+  db: { schema: "yoinkr" },
   auth: {
     // AsyncStorage on native; the default (localStorage) on web.
     ...(Platform.OS !== "web" ? { storage: AsyncStorage } : {}),
