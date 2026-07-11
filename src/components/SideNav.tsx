@@ -1,9 +1,10 @@
 import { router, usePathname } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRegion } from "@/store/useRegion";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
+import { SidebarFilters } from "./FeedFilters";
 import { LogoMark } from "./Logo";
 import { PressableScale } from "./PressableScale";
 
@@ -73,33 +74,38 @@ export function Sidebar() {
         <Text style={sideStyles.postText}>＋ Post a job</Text>
       </PressableScale>
 
-      <View style={{ gap: 4, marginTop: 18 }}>
-        {ITEMS.map((it) => {
-          const isActive = active === it.path;
-          return (
-            <PressableScale
-              key={it.path}
-              style={[sideStyles.item, isActive && sideStyles.itemActive]}
-              onPress={() => goTo(it.path)}
-            >
-              <Text style={[sideStyles.icon, { color: isActive ? colors.accentDark : colors.secondary }]}>
-                {it.icon}
-              </Text>
-              <Text
-                style={[
-                  sideStyles.label,
-                  { color: isActive ? colors.accentDark : colors.inkBrand },
-                  isActive && { fontFamily: fonts.bodyBold },
-                ]}
+      {/* Nav + contextual filters scroll together on short windows. */}
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <View style={{ gap: 4, marginTop: 18 }}>
+          {ITEMS.map((it) => {
+            const isActive = active === it.path;
+            return (
+              <PressableScale
+                key={it.path}
+                style={[sideStyles.item, isActive && sideStyles.itemActive]}
+                onPress={() => goTo(it.path)}
               >
-                {it.label}
-              </Text>
-            </PressableScale>
-          );
-        })}
-      </View>
+                <Text style={[sideStyles.icon, { color: isActive ? colors.accentDark : colors.secondary }]}>
+                  {it.icon}
+                </Text>
+                <Text
+                  style={[
+                    sideStyles.label,
+                    { color: isActive ? colors.accentDark : colors.inkBrand },
+                    isActive && { fontFamily: fonts.bodyBold },
+                  ]}
+                >
+                  {it.label}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </View>
 
-      <View style={{ flex: 1 }} />
+        {/* Feed filters — only meaningful on the Jobs feed (FB Marketplace
+            pattern: category/trade lists live in the left column). */}
+        {active === "/" && <SidebarFilters />}
+      </ScrollView>
 
       <PressableScale style={sideStyles.region} onPress={() => router.push("/region")}>
         <Text style={sideStyles.regionText}>📍 {city}</Text>
