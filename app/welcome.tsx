@@ -169,7 +169,9 @@ export default function WelcomeScreen() {
   if (isDesktop) {
     return (
       <View style={styles.split}>
-        <View style={styles.splitLeft}>{hero}</View>
+        <View style={styles.splitLeft}>
+          <View style={{ width: "100%", maxWidth: 440 }}>{hero}</View>
+        </View>
         <View style={styles.splitRight}>
           <View style={{ width: "100%", maxWidth: 420 }}>{card}</View>
         </View>
@@ -233,18 +235,23 @@ const styles = StyleSheet.create({
 
   // Desktop: Facebook-style split — brand pane left, sign-in pane right.
   split: { flex: 1, flexDirection: "row" },
+  // Each pane pulls its content toward the center line so the lockup and the
+  // card sit close together on wide screens instead of hugging the viewport
+  // edges (the gap between them stays a fixed 2 × 56px).
   splitLeft: {
-    flex: 1.2,
+    flex: 1,
     backgroundColor: colors.warmPaper,
     justifyContent: "center",
+    alignItems: "flex-end",
     paddingHorizontal: 56,
   },
   splitRight: {
     flex: 1,
     backgroundColor: colors.paper,
     justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
+    alignItems: "flex-start",
+    paddingHorizontal: 56,
+    paddingVertical: 32,
   },
 
   hero: { alignItems: "center", paddingVertical: 28 },
