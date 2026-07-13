@@ -37,8 +37,13 @@ export function FeedCard({
   else if (listing.type === "available") action = "View profile";
   return (
     <View style={styles.card}>
-      {listing.photoUrl ? (
-        <Placeholder photoUrl={listing.photoUrl} style={styles.photo}>
+      {listing.photoUrl || listing.trade ? (
+        <Placeholder
+          photoUrl={listing.photoUrl}
+          trade={listing.trade}
+          seed={listing.id}
+          style={styles.photo}
+        >
           <View style={styles.photoBadges}>
             <TypeBadge type={listing.type} />
             {listing.trade && <TradeTag trade={listing.trade} />}

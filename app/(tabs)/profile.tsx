@@ -5,9 +5,11 @@ import { Avatar } from "@/components/Avatar";
 import { Header } from "@/components/Header";
 import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
+import { SamplePill, TradeArt } from "@/components/TradeArt";
 import { Verified } from "@/components/Verified";
 import { addPortfolioPhoto } from "@/data/photos";
 import { getMyProfile, getPortfolio, setAvailability } from "@/data/repository";
+import { tradeIdFromLabel } from "@/data/trades";
 import type { PortfolioPhoto, Profile } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
@@ -31,6 +33,8 @@ export default function ProfileScreen() {
     const next = await setAvailability(!me.available);
     setMe({ ...next });
   };
+
+  const myTradeId = tradeIdFromLabel(me?.trade);
 
   const onAddPhoto = async () => {
     try {
@@ -131,7 +135,20 @@ export default function ProfileScreen() {
               <Text style={styles.gridLabel}>{p.caption}</Text>
             </Placeholder>
           ))}
+          {/* Trade-default art until the user adds real work photos. */}
+          {portfolio.length === 0 &&
+            myTradeId &&
+            [0, 1, 2].map((v) => (
+              <TradeArt key={v} trade={myTradeId} variant={v} style={styles.gridItem}>
+                <SamplePill />
+              </TradeArt>
+            ))}
         </View>
+        {portfolio.length === 0 && myTradeId && (
+          <Text style={styles.sampleNote}>
+            Sample {me.trade} images — add photos of your own work to stand out.
+          </Text>
+        )}
       </ScrollView>
     </View>
   );
@@ -237,4 +254,5 @@ const styles = StyleSheet.create({
     padding: 9,
   },
   gridLabel: { fontSize: 11, color: colors.white, fontWeight: "700", textShadowColor: "rgba(0,0,0,.4)", textShadowRadius: 3 },
+  sampleNote: { paddingHorizontal: 18, paddingTop: 8, fontSize: 10.5, color: colors.inkLo, lineHeight: 15 },
 });

@@ -38,7 +38,12 @@ export function FeedCardWide({
   return (
     <View style={styles.card}>
       {/* photo (left) */}
-      <Placeholder photoUrl={listing.photoUrl} style={styles.photo}>
+      <Placeholder
+        photoUrl={listing.photoUrl}
+        trade={listing.trade}
+        seed={listing.id}
+        style={styles.photo}
+      >
         <View style={styles.photoBadges}>
           <TypeBadge type={listing.type} />
           {listing.urgent && <UrgentBadge />}

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "@/components/Avatar";
 import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
+import { SamplePill, TradeArt } from "@/components/TradeArt";
 import { Verified } from "@/components/Verified";
 import {
   getOrCreateConversation,
@@ -12,6 +13,7 @@ import {
   getProfile,
   getReferences,
 } from "@/data/repository";
+import { tradeIdFromLabel } from "@/data/trades";
 import type { PortfolioPhoto, Profile, Reference } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
@@ -39,6 +41,7 @@ export default function WorkerProfileScreen() {
   }
 
   const isNew = profile.dealsClosed === 0;
+  const tradeId = tradeIdFromLabel(profile.trade);
 
   return (
     <View style={styles.screen}>
@@ -135,17 +138,30 @@ export default function WorkerProfileScreen() {
           ))
         )}
 
-        {/* portfolio */}
-        {portfolio.length > 0 && (
+        {/* portfolio — trade-default art when the worker hasn't added photos */}
+        {(portfolio.length > 0 || tradeId) && (
           <>
             <Text style={styles.sectionTitle}>Work photos</Text>
             <View style={styles.grid}>
-              {portfolio.map((p) => (
-                <Placeholder key={p.id} photoUrl={p.photoUrl} style={styles.gridItem}>
-                  <Text style={styles.gridLabel}>{p.caption}</Text>
-                </Placeholder>
-              ))}
+              {portfolio.length > 0
+                ? portfolio.map((p) => (
+                    <Placeholder key={p.id} photoUrl={p.photoUrl} style={styles.gridItem}>
+                      <Text style={styles.gridLabel}>{p.caption}</Text>
+                    </Placeholder>
+                  ))
+                : tradeId &&
+                  [0, 1, 2].map((v) => (
+                    <TradeArt key={v} trade={tradeId} variant={v} style={styles.gridItem}>
+                      <SamplePill />
+                    </TradeArt>
+                  ))}
             </View>
+            {portfolio.length === 0 && (
+              <Text style={styles.sampleNote}>
+                Sample {profile.trade} images — {profile.fullName.split(" ")[0]} hasn’t added
+                work photos yet.
+              </Text>
+            )}
           </>
         )}
       </ScrollView>
@@ -274,4 +290,5 @@ const styles = StyleSheet.create({
     padding: 9,
   },
   gridLabel: { fontSize: 11, color: colors.white, fontWeight: "700", textShadowColor: "rgba(0,0,0,.4)", textShadowRadius: 3 },
+  sampleNote: { paddingHorizontal: 18, paddingTop: 8, fontSize: 10.5, color: colors.inkLo, lineHeight: 15 },
 });

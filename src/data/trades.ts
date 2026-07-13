@@ -13,3 +13,11 @@ export type TradeId = (typeof TRADES)[number]["id"];
 export function tradeLabel(id: TradeId | null | undefined): string {
   return TRADES.find((t) => t.id === id)?.label ?? "";
 }
+
+// Profiles store the display label ("Framing"); map it back to the stable id
+// (used to pick trade-default artwork for portfolios).
+export function tradeIdFromLabel(label: string | null | undefined): TradeId | null {
+  if (!label) return null;
+  const needle = label.trim().toLowerCase();
+  return TRADES.find((t) => t.label.toLowerCase() === needle || t.id === needle)?.id ?? null;
+}
