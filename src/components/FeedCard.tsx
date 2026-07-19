@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
-import { tradeLabel } from "@/data/trades";
+import { categoryLabel } from "@/data/categories";
 import type { Listing } from "@/data/types";
 import { Avatar } from "./Avatar";
 import { TypeBadge, UrgentBadge } from "./Badge";
@@ -37,23 +37,23 @@ export function FeedCard({
   else if (listing.type === "available") action = "View profile";
   return (
     <View style={styles.card}>
-      {listing.photoUrl || listing.trade ? (
+      {listing.photoUrl || listing.category ? (
         <Placeholder
           photoUrl={listing.photoUrl}
-          trade={listing.trade}
+          category={listing.category}
           seed={listing.id}
           style={styles.photo}
         >
           <View style={styles.photoBadges}>
             <TypeBadge type={listing.type} />
-            {listing.trade && <TradeTag trade={listing.trade} />}
+            {listing.category && <CategoryTag category={listing.category} />}
             {listing.urgent && <UrgentBadge />}
           </View>
         </Placeholder>
       ) : (
         <View style={styles.noPhotoBadges}>
           <TypeBadge type={listing.type} />
-          {listing.trade && <TradeTag trade={listing.trade} />}
+          {listing.category && <CategoryTag category={listing.category} />}
           {listing.urgent && <UrgentBadge />}
         </View>
       )}
@@ -98,10 +98,10 @@ export function FeedCard({
   );
 }
 
-function TradeTag({ trade }: { trade: NonNullable<Listing["trade"]> }) {
+function CategoryTag({ category }: { category: NonNullable<Listing["category"]> }) {
   return (
     <View style={styles.tradeTag}>
-      <Text style={styles.tradeTagText}>{tradeLabel(trade)}</Text>
+      <Text style={styles.tradeTagText}>{categoryLabel(category)}</Text>
     </View>
   );
 }

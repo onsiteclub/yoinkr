@@ -24,14 +24,14 @@ export default function FeedScreen() {
 
   // Filter state is shared with the desktop sidebar panel (see FeedFilters).
   const type = useFeedFilter((s) => s.type);
-  const trade = useFeedFilter((s) => s.trade);
+  const category = useFeedFilter((s) => s.category);
   const [listings, setListings] = useState<Listing[]>([]);
   const [count, setCount] = useState(0);
 
   const load = useCallback(() => {
-    getListings({ type, trade, city }).then(setListings);
+    getListings({ type, category, city }).then(setListings);
     getWeekendJobCount(city).then(setCount);
-  }, [type, trade, city]);
+  }, [type, category, city]);
 
   useEffect(() => {
     load();

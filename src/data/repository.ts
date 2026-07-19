@@ -4,17 +4,24 @@
 // onsite-core-db repo). Reads of public data (open listings, profiles,
 // references) work without a session; writes ensure an anonymous session
 // first (see src/data/supabase.ts). Chat runs on Supabase Realtime.
+//
+// Reputation numbers (avg stars, deals closed, vouch count) come from the
+// yoinkr.profile_stats view — the profile row stores no aggregates. Screens
+// therefore get them via a batched second query (statsFor), keyed by user id.
+import type { CategoryId, PayModel } from "./categories";
+import { payLabel } from "./categories";
 import type {
   Application,
   ChatSummary,
+  Deal,
   Listing,
   ListingType,
   PortfolioPhoto,
   Profile,
   Reference,
   ThreadMessage,
+  Vouch,
 } from "./types";
-import type { TradeId } from "./trades";
 import { currentUserId, ensureUserId, supabase } from "./supabase";
 
 // ---- mapping helpers ----
@@ -32,32 +39,83 @@ function timeAgo(iso: string): string {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
+// ---- reputation stats (profile_stats view) ----
+
+export interface ProfileStats {
+  trustScore: number | null; // null until 3+ ratings (enforced by the view)
+  ratingCount: number;
+  dealsClosed: number;
+  vouchCount: number;
+}
+
+const NO_STATS: ProfileStats = { trustScore: null, ratingCount: 0, dealsClosed: 0, vouchCount: 0 };
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function mapProfile(row: any): Profile {
+async function statsFor(ids: string[]): Promise<Record<string, ProfileStats>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return {};
+  const { data, error } = await supabase
+    .from("profile_stats")
+    .select("*")
+    .in("profile_id", unique);
+  if (error) throw error;
+  const map: Record<string, ProfileStats> = {};
+  for (const r of data ?? []) {
+    map[r.profile_id] = {
+      trustScore: r.avg_stars != null ? Number(r.avg_stars) : null,
+      ratingCount: r.rating_count ?? 0,
+      dealsClosed: r.deals_closed ?? 0,
+      vouchCount: r.vouch_count ?? 0,
+    };
+  }
+  return map;
+}
+
+function mapProfile(row: any, stats: ProfileStats): Profile {
   return {
     id: row.id,
     fullName: row.full_name,
-    trade: row.trade ?? "",
+    categories: (row.categories ?? []) as CategoryId[],
     yearsExp: row.years_exp ?? 0,
     region: row.region ?? "Ottawa, ON",
     available: !!row.available,
-    trustScore: Number(row.trust_score ?? 0),
-    dealsClosed: row.deals_closed ?? 0,
+    acceptsHourly: row.accepts_hourly ?? true,
+    acceptsPiecework: !!row.accepts_piecework,
+    crewSize: row.crew_size ?? 1,
+    trustScore: stats.trustScore,
+    ratingCount: stats.ratingCount,
+    dealsClosed: stats.dealsClosed,
+    vouchCount: stats.vouchCount,
     verified: !!row.verified,
     createdAt: row.created_at,
   };
 }
 
-function mapListing(row: any, myId: string | null): Listing {
+function mapListing(row: any, myId: string | null, stats: Record<string, ProfileStats>): Listing {
   const apps: any[] = row.applications ?? [];
+  const s = stats[row.author_id] ?? NO_STATS;
+  const sqft = row.sqft != null ? Number(row.sqft) : null;
+  const crewSize = row.crew_size ?? 1;
+  // Fold sqft + crew into the meta line so cards stay a single "pay · detail".
+  const detail = [
+    sqft ? `${sqft.toLocaleString("en-CA")} sqft` : null,
+    crewSize === 2 ? (row.type === "job" ? "crew of 2" : "duo") : null,
+    row.detail || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return {
     id: row.id,
     authorId: row.author_id,
     type: row.type as ListingType,
-    trade: (row.trade as TradeId) ?? null,
+    category: (row.category as CategoryId) ?? null,
+    payModel: (row.pay_model as PayModel) ?? null,
+    rate: row.rate != null ? Number(row.rate) : null,
+    sqft,
+    crewSize,
+    pay: payLabel(row.pay_model ?? null, row.rate != null ? Number(row.rate) : null),
     title: row.title,
-    pay: row.pay,
-    detail: row.detail ?? "",
+    detail,
     city: row.city,
     location: row.location,
     distanceKm: row.distance_km != null ? Number(row.distance_km) : undefined,
@@ -68,8 +126,8 @@ function mapListing(row: any, myId: string | null): Listing {
     when: timeAgo(row.created_at),
     author: {
       fullName: row.author?.full_name ?? "—",
-      trustScore: Number(row.author?.trust_score ?? 0),
-      dealsClosed: row.author?.deals_closed ?? 0,
+      trustScore: s.trustScore,
+      dealsClosed: s.dealsClosed,
       verified: !!row.author?.verified,
     },
     // RLS already limits application rows to "mine or on my listing".
@@ -79,8 +137,7 @@ function mapListing(row: any, myId: string | null): Listing {
   };
 }
 
-const LISTING_SELECT =
-  "*, author:profiles(full_name,trust_score,deals_closed,verified), applications(applicant_id)";
+const LISTING_SELECT = "*, author:profiles(full_name,verified), applications(applicant_id)";
 
 // ---- Profile ----
 
@@ -88,28 +145,40 @@ export async function getMyProfile(): Promise<Profile> {
   const uid = await ensureUserId();
   const { data, error } = await supabase.from("profiles").select("*").eq("id", uid).single();
   if (error) throw error;
-  return mapProfile(data);
+  const stats = await statsFor([uid]);
+  return mapProfile(data, stats[uid] ?? NO_STATS);
 }
 
 export async function updateMyProfile(input: {
   fullName: string;
-  trade: string;
+  categories: CategoryId[];
   yearsExp: number;
+  acceptsHourly: boolean;
+  acceptsPiecework: boolean;
+  crewSize: number;
 }): Promise<Profile> {
   const uid = await ensureUserId();
   const { data, error } = await supabase
     .from("profiles")
-    .update({ full_name: input.fullName, trade: input.trade, years_exp: input.yearsExp })
+    .update({
+      full_name: input.fullName,
+      categories: input.categories,
+      years_exp: input.yearsExp,
+      accepts_hourly: input.acceptsHourly,
+      accepts_piecework: input.acceptsPiecework,
+      crew_size: input.crewSize,
+    })
     .eq("id", uid)
     .select()
     .single();
   if (error) throw error;
-  return mapProfile(data);
+  const stats = await statsFor([uid]);
+  return mapProfile(data, stats[uid] ?? NO_STATS);
 }
 
 // Default profiles (fresh anonymous users) still carry the DB default name.
 export function isProfileIncomplete(p: Profile): boolean {
-  return p.fullName === "New worker" || !p.trade;
+  return p.fullName === "New worker" || p.categories.length === 0;
 }
 
 export async function setAvailability(available: boolean): Promise<Profile> {
@@ -121,13 +190,16 @@ export async function setAvailability(available: boolean): Promise<Profile> {
     .select()
     .single();
   if (error) throw error;
-  return mapProfile(data);
+  const stats = await statsFor([uid]);
+  return mapProfile(data, stats[uid] ?? NO_STATS);
 }
 
 export async function getProfile(profileId: string): Promise<Profile | undefined> {
   const { data, error } = await supabase.from("profiles").select("*").eq("id", profileId).maybeSingle();
   if (error) throw error;
-  return data ? mapProfile(data) : undefined;
+  if (!data) return undefined;
+  const stats = await statsFor([profileId]);
+  return mapProfile(data, stats[profileId] ?? NO_STATS);
 }
 
 export async function getPortfolio(profileId: string): Promise<PortfolioPhoto[]> {
@@ -147,10 +219,12 @@ export async function getPortfolio(profileId: string): Promise<PortfolioPhoto[]>
   }));
 }
 
+// Ratings the server has revealed (double-blind: hidden until both sides
+// rated the deal, or 14 days pass — RLS decides, not the client).
 export async function getReferences(profileId: string): Promise<Reference[]> {
   const { data, error } = await supabase
     .from("ratings")
-    .select("*, rater:profiles!ratings_rater_id_fkey(full_name,trust_score)")
+    .select("*, rater:profiles!ratings_rater_id_fkey(full_name)")
     .eq("ratee_id", profileId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -158,7 +232,6 @@ export async function getReferences(profileId: string): Promise<Reference[]> {
     id: r.id,
     profileId: r.ratee_id,
     raterName: r.rater?.full_name ?? "—",
-    raterTrust: Number(r.rater?.trust_score ?? 0),
     stars: r.stars,
     comment: r.comment ?? "",
     when: timeAgo(r.created_at),
@@ -166,12 +239,12 @@ export async function getReferences(profileId: string): Promise<Reference[]> {
 }
 
 // ---- Listings / feed ----
-// Two filter axes (type + trade) scoped to a city (region gate). "Workers"
-// maps to the `available` listing type; trade filtering is ignored for tools.
+// Two filter axes (type + category) scoped to a city (region gate). "Workers"
+// maps to the `available` listing type; category is ignored for tools.
 export type TypeFilter = "All" | "Jobs" | "Workers" | "Tools";
 export interface FeedFilter {
   type: TypeFilter;
-  trade: TradeId | "All";
+  category: CategoryId | "All";
   city: string;
 }
 
@@ -191,10 +264,12 @@ export async function getListings(filter: FeedFilter): Promise<Listing[]> {
     .order("created_at", { ascending: false });
   const wantedType = typeFor[filter.type];
   if (wantedType) q = q.eq("type", wantedType);
-  if (filter.trade !== "All") q = q.eq("trade", filter.trade);
+  if (filter.category !== "All") q = q.eq("category", filter.category);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map((r) => mapListing(r, myId));
+  const rows = data ?? [];
+  const stats = await statsFor(rows.map((r: any) => r.author_id));
+  return rows.map((r) => mapListing(r, myId, stats));
 }
 
 export async function getListing(id: string): Promise<Listing | undefined> {
@@ -205,7 +280,9 @@ export async function getListing(id: string): Promise<Listing | undefined> {
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
-  return data ? mapListing(data, myId) : undefined;
+  if (!data) return undefined;
+  const stats = await statsFor([data.author_id]);
+  return mapListing(data, myId, stats);
 }
 
 export async function getWeekendJobCount(city: string): Promise<number> {
@@ -221,9 +298,12 @@ export async function getWeekendJobCount(city: string): Promise<number> {
 
 export interface NewListing {
   type: ListingType;
-  trade: TradeId | null;
+  category: CategoryId | null;
+  payModel: PayModel | null;
+  rate: number | null;
+  sqft: number | null;
+  crewSize: number;
   title: string;
-  pay: string;
   detail: string;
   city: string;
   location: string;
@@ -238,9 +318,12 @@ export async function createListing(input: NewListing): Promise<Listing> {
     .insert({
       author_id: uid,
       type: input.type,
-      trade: input.trade,
+      category: input.category,
+      pay_model: input.payModel,
+      rate: input.rate,
+      sqft: input.sqft,
+      crew_size: input.crewSize,
       title: input.title,
-      pay: input.pay,
       detail: input.detail,
       city: input.city,
       location: input.location,
@@ -250,7 +333,8 @@ export async function createListing(input: NewListing): Promise<Listing> {
     .select(LISTING_SELECT)
     .single();
   if (error) throw error;
-  return mapListing(data, uid);
+  const stats = await statsFor([uid]);
+  return mapListing(data, uid, stats);
 }
 
 // ---- Applications (worker → job proposals) ----
@@ -258,28 +342,33 @@ export async function createListing(input: NewListing): Promise<Listing> {
 export async function getApplications(listingId: string): Promise<Application[]> {
   const { data, error } = await supabase
     .from("applications")
-    .select("*, applicant:profiles(full_name,trade,years_exp,trust_score,deals_closed,verified)")
+    .select("*, applicant:profiles(full_name,categories,years_exp,verified)")
     .eq("listing_id", listingId)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map((a: any) => ({
-    id: a.id,
-    listingId: a.listing_id,
-    applicantId: a.applicant_id,
-    message: a.message,
-    proposedRate: a.proposed_rate ?? "",
-    status: a.status,
-    when: timeAgo(a.created_at),
-    createdAt: a.created_at,
-    applicant: {
-      fullName: a.applicant?.full_name ?? "—",
-      trade: a.applicant?.trade ?? "",
-      yearsExp: a.applicant?.years_exp ?? 0,
-      trustScore: Number(a.applicant?.trust_score ?? 0),
-      dealsClosed: a.applicant?.deals_closed ?? 0,
-      verified: !!a.applicant?.verified,
-    },
-  }));
+  const rows = data ?? [];
+  const stats = await statsFor(rows.map((a: any) => a.applicant_id));
+  return rows.map((a: any) => {
+    const s = stats[a.applicant_id] ?? NO_STATS;
+    return {
+      id: a.id,
+      listingId: a.listing_id,
+      applicantId: a.applicant_id,
+      message: a.message,
+      proposedRate: a.proposed_rate ?? "",
+      status: a.status,
+      when: timeAgo(a.created_at),
+      createdAt: a.created_at,
+      applicant: {
+        fullName: a.applicant?.full_name ?? "—",
+        categories: (a.applicant?.categories ?? []) as CategoryId[],
+        yearsExp: a.applicant?.years_exp ?? 0,
+        trustScore: s.trustScore,
+        dealsClosed: s.dealsClosed,
+        verified: !!a.applicant?.verified,
+      },
+    };
+  });
 }
 
 export async function applyToListing(
@@ -298,15 +387,207 @@ export async function applyToListing(
   if (error && error.code !== "23505") throw error;
 }
 
+// ---- Deals (accept → done → rate) ----
+
+function mapDeal(row: any): Deal {
+  return {
+    id: row.id,
+    listingId: row.listing_id,
+    applicationId: row.application_id,
+    workerId: row.worker_id,
+    hirerId: row.hirer_id,
+    state: row.state,
+    createdAt: row.created_at,
+  };
+}
+
+// Accepting is what creates the deal: the job's author (hirer) takes the
+// applicant (worker). Idempotent — re-accepting returns the existing deal.
+export async function acceptApplication(application: Application): Promise<Deal> {
+  const uid = await ensureUserId();
+  const { error: statusErr } = await supabase
+    .from("applications")
+    .update({ status: "accepted" })
+    .eq("id", application.id);
+  if (statusErr) throw statusErr;
+
+  const { data, error } = await supabase
+    .from("deals")
+    .insert({
+      listing_id: application.listingId,
+      application_id: application.id,
+      worker_id: application.applicantId,
+      hirer_id: uid,
+      state: "agreed",
+      proposed_by: uid,
+    })
+    .select()
+    .single();
+  if (!error) return mapDeal(data);
+  if (error.code !== "23505") throw error; // unique(application_id) → already accepted
+  const { data: existing, error: findErr } = await supabase
+    .from("deals")
+    .select("*")
+    .eq("application_id", application.id)
+    .single();
+  if (findErr) throw findErr;
+  return mapDeal(existing);
+}
+
+export async function declineApplication(applicationId: string): Promise<void> {
+  const { error } = await supabase
+    .from("applications")
+    .update({ status: "declined" })
+    .eq("id", applicationId);
+  if (error) throw error;
+}
+
+// The deal between me and `otherId` about `listingId` (chat banner lookup).
+// RLS already scopes deals to my own, so filtering by the other party is safe.
+export async function getDealWith(otherId: string, listingId: string): Promise<Deal | undefined> {
+  await ensureUserId();
+  const { data, error } = await supabase.from("deals").select("*").eq("listing_id", listingId);
+  if (error) throw error;
+  const row = (data ?? []).find((d: any) => d.worker_id === otherId || d.hirer_id === otherId);
+  return row ? mapDeal(row) : undefined;
+}
+
+export async function markDealDone(dealId: string): Promise<void> {
+  const { error } = await supabase.from("deals").update({ state: "done" }).eq("id", dealId);
+  if (error) throw error;
+}
+
+// My side of the double-blind rating (RLS always shows me my own rating).
+export async function getMyRatingForDeal(dealId: string): Promise<boolean> {
+  const uid = await ensureUserId();
+  const { data, error } = await supabase
+    .from("ratings")
+    .select("id")
+    .eq("deal_id", dealId)
+    .eq("rater_id", uid)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
+export async function rateDeal(deal: Deal, stars: number, comment: string): Promise<void> {
+  const uid = await ensureUserId();
+  const rateeId = deal.workerId === uid ? deal.hirerId : deal.workerId;
+  const { error } = await supabase.from("ratings").insert({
+    deal_id: deal.id,
+    rater_id: uid,
+    ratee_id: rateeId,
+    stars,
+    comment,
+  });
+  if (error && error.code !== "23505") throw error; // already rated → idempotent
+  // Both sides in? Close the loop. (Counterpart rows become visible to me the
+  // moment mine lands — the reveal rule — so this count is reliable.)
+  const { count } = await supabase
+    .from("ratings")
+    .select("id", { count: "exact", head: true })
+    .eq("deal_id", deal.id);
+  if ((count ?? 0) >= 2) {
+    await supabase.from("deals").update({ state: "rated" }).eq("id", deal.id);
+  }
+}
+
+// ---- Vouches (named peer endorsements) ----
+
+export async function getVouches(profileId: string): Promise<Vouch[]> {
+  const { data, error } = await supabase
+    .from("vouches")
+    .select("*, voucher:profiles!vouches_voucher_id_fkey(full_name,verified)")
+    .eq("vouchee_id", profileId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const rows = data ?? [];
+  const stats = await statsFor(rows.map((v: any) => v.voucher_id));
+  return rows.map((v: any) => ({
+    id: v.id,
+    voucherId: v.voucher_id,
+    voucheeId: v.vouchee_id,
+    category: v.category as CategoryId,
+    comment: v.comment ?? "",
+    when: timeAgo(v.created_at),
+    voucher: {
+      fullName: v.voucher?.full_name ?? "—",
+      trustScore: (stats[v.voucher_id] ?? NO_STATS).trustScore,
+      verified: !!v.voucher?.verified,
+    },
+  }));
+}
+
+export async function haveIVouched(voucheeId: string): Promise<boolean> {
+  const uid = await currentUserId();
+  if (!uid) return false;
+  const { data, error } = await supabase
+    .from("vouches")
+    .select("id")
+    .eq("voucher_id", uid)
+    .eq("vouchee_id", voucheeId)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
+export async function addVouch(
+  voucheeId: string,
+  category: CategoryId,
+  comment: string
+): Promise<void> {
+  const uid = await ensureUserId();
+  const { error } = await supabase.from("vouches").insert({
+    voucher_id: uid,
+    vouchee_id: voucheeId,
+    category,
+    comment,
+  });
+  // one vouch per (voucher, vouchee) — re-vouching is a no-op.
+  if (error && error.code !== "23505") throw error;
+}
+
+export async function removeVouch(voucheeId: string): Promise<void> {
+  const uid = await ensureUserId();
+  const { error } = await supabase
+    .from("vouches")
+    .delete()
+    .eq("voucher_id", uid)
+    .eq("vouchee_id", voucheeId);
+  if (error) throw error;
+}
+
+// ---- Reports (founder reviews these in the dashboard — no client read) ----
+
+export type ReportKind = "non_payment" | "no_show" | "abuse" | "spam" | "other";
+
+export async function reportUser(
+  targetId: string,
+  kind: ReportKind,
+  reason: string,
+  dealId?: string
+): Promise<void> {
+  const uid = await ensureUserId();
+  const { error } = await supabase.from("reports").insert({
+    reporter_id: uid,
+    target_type: "user",
+    target_id: targetId,
+    kind,
+    reason,
+    deal_id: dealId ?? null,
+  });
+  if (error) throw error;
+}
+
 // ---- Chat (Supabase + Realtime) ----
 
 const CONV_SELECT = `*,
-  a:profiles!conversations_participant_a_fkey(id,full_name,trust_score),
-  b:profiles!conversations_participant_b_fkey(id,full_name,trust_score),
-  listing:listings(title,pay,detail),
+  a:profiles!conversations_participant_a_fkey(id,full_name),
+  b:profiles!conversations_participant_b_fkey(id,full_name),
+  listing:listings(id,title,detail,pay_model,rate),
   messages(body,sender_id,created_at)`;
 
-function mapChat(row: any, uid: string): ChatSummary {
+function mapChat(row: any, uid: string, stats: Record<string, ProfileStats>): ChatSummary {
   const other = row.a?.id === uid ? row.b : row.a;
   const last = (row.messages ?? [])[0];
   const myLastRead = row.a?.id === uid ? row.a_last_read : row.b_last_read;
@@ -316,15 +597,20 @@ function mapChat(row: any, uid: string): ChatSummary {
     id: row.id,
     conversationId: row.id,
     otherId: other?.id ?? "",
+    listingId: row.listing_id ?? null,
     name: other?.full_name ?? "—",
     avatar: (other?.full_name ?? "?")[0],
-    trust: Number(other?.trust_score ?? 0),
+    trust: (stats[other?.id] ?? NO_STATS).trustScore,
     lastMessage: last?.body ?? "Say hi 👋",
     when: last ? timeAgo(last.created_at) : timeAgo(row.created_at),
     unread,
-    online: false, // presence is a nice-to-have (HANDOFF §6) — not v1
+    online: false, // presence is a nice-to-have — not v1
     jobContext: row.listing
-      ? { title: row.listing.title, pay: row.listing.pay, detail: row.listing.detail }
+      ? {
+          title: row.listing.title,
+          pay: payLabel(row.listing.pay_model ?? null, row.listing.rate != null ? Number(row.listing.rate) : null),
+          detail: row.listing.detail ?? "",
+        }
       : undefined,
   };
 }
@@ -344,7 +630,10 @@ export async function getChats(): Promise<ChatSummary[]> {
     const ly = y.messages?.[0]?.created_at ?? y.created_at;
     return lx < ly ? 1 : -1;
   });
-  return rows.map((r) => mapChat(r, uid));
+  const stats = await statsFor(
+    rows.map((r: any) => (r.a?.id === uid ? r.b?.id : r.a?.id)).filter(Boolean)
+  );
+  return rows.map((r) => mapChat(r, uid, stats));
 }
 
 export async function getChat(conversationId: string): Promise<ChatSummary | undefined> {
@@ -357,7 +646,10 @@ export async function getChat(conversationId: string): Promise<ChatSummary | und
     .limit(1, { referencedTable: "messages" })
     .maybeSingle();
   if (error) throw error;
-  return data ? mapChat(data, uid) : undefined;
+  if (!data) return undefined;
+  const otherId = (data as any).a?.id === uid ? (data as any).b?.id : (data as any).a?.id;
+  const stats = await statsFor(otherId ? [otherId] : []);
+  return mapChat(data, uid, stats);
 }
 
 // Find or start the conversation between me and `otherId` about `listingId`

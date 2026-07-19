@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "@/components/Avatar";
 import { Placeholder } from "@/components/Placeholder";
@@ -8,19 +8,31 @@ import { PressableScale } from "@/components/PressableScale";
 import { SamplePill, TradeArt } from "@/components/TradeArt";
 import { Verified } from "@/components/Verified";
 import {
+  CATEGORIES,
+  type CategoryId,
+  categoryLabel,
+  categoryLabels,
+} from "@/data/categories";
+import {
+  addVouch,
   getOrCreateConversation,
   getPortfolio,
   getProfile,
   getReferences,
+  getVouches,
+  haveIVouched,
+  removeVouch,
 } from "@/data/repository";
-import { tradeIdFromLabel } from "@/data/trades";
-import type { PortfolioPhoto, Profile, Reference } from "@/data/types";
+import { currentUserId } from "@/data/supabase";
+import type { PortfolioPhoto, Profile, Reference, Vouch } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
 
-// Public profile — what an employer sees before offering work (and what a
-// worker sees of an employer). Photo, trade, stars, references, portfolio.
+// Public profile — what a hirer sees before offering work (and what a worker
+// sees of a hirer). Two trust signals, deliberately separate:
+//   stars/references = transactional truth (deals closed in-app, double-blind)
+//   vouches          = named social proof from other pros ("indicado por")
 export default function WorkerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -28,20 +40,42 @@ export default function WorkerProfileScreen() {
   const [profile, setProfile] = useState<Profile | undefined>();
   const [portfolio, setPortfolio] = useState<PortfolioPhoto[]>([]);
   const [references, setReferences] = useState<Reference[]>([]);
+  const [vouches, setVouches] = useState<Vouch[]>([]);
+  const [myVouch, setMyVouch] = useState(false);
+  const [isMe, setIsMe] = useState(false);
+  const [vouchOpen, setVouchOpen] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!id) return;
     getProfile(id).then(setProfile);
     getPortfolio(id).then(setPortfolio);
     getReferences(id).then(setReferences);
+    getVouches(id).then(setVouches);
+    haveIVouched(id).then(setMyVouch);
+    currentUserId().then((uid) => setIsMe(uid === id));
   }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (!profile) {
     return <View style={styles.screen} />;
   }
 
-  const isNew = profile.dealsClosed === 0;
-  const tradeId = tradeIdFromLabel(profile.trade);
+  const hasScore = profile.trustScore != null;
+  const artCategory = profile.categories[0] ?? null;
+
+  const onVouch = async (category: CategoryId, comment: string) => {
+    await addVouch(profile.id, category, comment);
+    setVouchOpen(false);
+    load();
+  };
+
+  const onUnvouch = async () => {
+    await removeVouch(profile.id);
+    load();
+  };
 
   return (
     <View style={styles.screen}>
@@ -70,7 +104,10 @@ export default function WorkerProfileScreen() {
               <Text style={styles.name}>{profile.fullName}</Text>
               {profile.verified && <Verified />}
             </View>
-            <Text style={styles.trade}>{profile.trade} · {profile.yearsExp} yrs</Text>
+            <Text style={styles.trade}>
+              {categoryLabels(profile.categories) || "—"} · {profile.yearsExp} yrs
+              {profile.crewSize === 2 ? " · duo" : ""}
+            </Text>
             <Text style={styles.region}>📍 {profile.region}</Text>
           </View>
           {profile.available && (
@@ -80,45 +117,82 @@ export default function WorkerProfileScreen() {
           )}
         </View>
 
-        {/* trust summary */}
+        {/* trust summary — avg only exists at 3+ ratings (server rule) */}
         <View style={styles.trustBadge}>
           <View style={styles.trustScoreCol}>
-            {isNew ? (
-              <Text style={styles.newBadge}>NEW</Text>
-            ) : (
+            {hasScore ? (
               <>
-                <Text style={styles.trustScore}>{profile.trustScore.toFixed(1)}</Text>
-                <Text style={styles.trustStars}>{stars(profile.trustScore)}</Text>
+                <Text style={styles.trustScore}>{profile.trustScore!.toFixed(1)}</Text>
+                <Text style={styles.trustStars}>{stars(profile.trustScore!)}</Text>
               </>
+            ) : (
+              <Text style={styles.newBadge}>NEW</Text>
             )}
           </View>
           <View style={styles.trustText}>
             <Text style={styles.trustTitle}>
-              {isNew ? "New on Yoinkr" : "Trusted"}
+              {hasScore ? "Trusted" : profile.ratingCount > 0 ? "Building reputation" : "New on Yoinkr"}
             </Text>
             <Text style={styles.trustBody}>
-              {isNew
-                ? `${profile.yearsExp} yrs of ${profile.trade} — no in-app deals yet`
-                : `${profile.dealsClosed} jobs closed in-app · rated by real hirers`}
+              {hasScore
+                ? `${profile.dealsClosed} jobs closed in-app · rated by real hirers`
+                : profile.ratingCount > 0
+                  ? `${profile.ratingCount} rating${profile.ratingCount > 1 ? "s" : ""} so far — the average shows at 3`
+                  : `${profile.yearsExp} yrs of experience — no in-app deals yet`}
             </Text>
           </View>
         </View>
 
-        {/* action */}
-        <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
-          <PressableScale
-            style={styles.messageBtn}
-            onPress={() =>
-              getOrCreateConversation(profile.id, null).then((convId) =>
-                router.push({ pathname: "/chat/[id]", params: { id: convId } })
-              )
-            }
-          >
-            <Text style={styles.messageText}>Message {profile.fullName.split(" ")[0]}</Text>
-          </PressableScale>
-        </View>
+        {/* actions */}
+        {!isMe && (
+          <View style={styles.actionRow}>
+            <PressableScale
+              style={styles.messageBtn}
+              onPress={() =>
+                getOrCreateConversation(profile.id, null).then((convId) =>
+                  router.push({ pathname: "/chat/[id]", params: { id: convId } })
+                )
+              }
+            >
+              <Text style={styles.messageText}>Message {profile.fullName.split(" ")[0]}</Text>
+            </PressableScale>
+            <PressableScale
+              style={[styles.vouchBtn, myVouch && styles.vouchBtnDone]}
+              onPress={() => (myVouch ? onUnvouch() : setVouchOpen(true))}
+            >
+              <Text style={[styles.vouchBtnText, myVouch && styles.vouchBtnTextDone]}>
+                {myVouch ? "Vouched ✓" : "Vouch"}
+              </Text>
+            </PressableScale>
+          </View>
+        )}
 
-        {/* references */}
+        {/* vouches — named, with the category they stand behind */}
+        {vouches.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Vouched by ({vouches.length})</Text>
+            {vouches.map((v) => (
+              <View key={v.id} style={styles.vouchCard}>
+                <Avatar letter={v.voucher.fullName[0] ?? "?"} size={28} />
+                <View style={{ flex: 1 }}>
+                  <View style={styles.vouchNameRow}>
+                    <Text style={styles.vouchName}>{v.voucher.fullName}</Text>
+                    {v.voucher.verified && <Verified size={12} />}
+                    {v.voucher.trustScore != null && (
+                      <Text style={styles.vouchTrust}>★ {v.voucher.trustScore.toFixed(1)}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.vouchMeta}>
+                    as {categoryLabel(v.category)} · {v.when}
+                  </Text>
+                  {!!v.comment && <Text style={styles.vouchComment}>“{v.comment}”</Text>}
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* references — only the server-revealed ones (double-blind) */}
         <Text style={styles.sectionTitle}>References ({references.length})</Text>
         {references.length === 0 ? (
           <Text style={styles.noRefs}>No references yet — be the first to close a deal.</Text>
@@ -133,13 +207,13 @@ export default function WorkerProfileScreen() {
                 </View>
                 <Text style={styles.refStars}>{stars(r.stars)}</Text>
               </View>
-              <Text style={styles.refComment}>“{r.comment}”</Text>
+              {!!r.comment && <Text style={styles.refComment}>“{r.comment}”</Text>}
             </View>
           ))
         )}
 
-        {/* portfolio — trade-default art when the worker hasn't added photos */}
-        {(portfolio.length > 0 || tradeId) && (
+        {/* portfolio — category-default art when the worker hasn't added photos */}
+        {(portfolio.length > 0 || artCategory) && (
           <>
             <Text style={styles.sectionTitle}>Work photos</Text>
             <View style={styles.grid}>
@@ -149,23 +223,100 @@ export default function WorkerProfileScreen() {
                       <Text style={styles.gridLabel}>{p.caption}</Text>
                     </Placeholder>
                   ))
-                : tradeId &&
+                : artCategory &&
                   [0, 1, 2].map((v) => (
-                    <TradeArt key={v} trade={tradeId} variant={v} style={styles.gridItem}>
+                    <TradeArt key={v} category={artCategory} variant={v} style={styles.gridItem}>
                       <SamplePill />
                     </TradeArt>
                   ))}
             </View>
-            {portfolio.length === 0 && (
+            {portfolio.length === 0 && artCategory && (
               <Text style={styles.sampleNote}>
-                Sample {profile.trade} images — {profile.fullName.split(" ")[0]} hasn’t added
-                work photos yet.
+                Sample {categoryLabel(artCategory)} images — {profile.fullName.split(" ")[0]} hasn’t
+                added work photos yet.
               </Text>
             )}
           </>
         )}
       </ScrollView>
+
+      <VouchModal
+        visible={vouchOpen}
+        name={profile.fullName.split(" ")[0]}
+        categories={profile.categories.length > 0 ? profile.categories : CATEGORIES.map((c) => c.id)}
+        onClose={() => setVouchOpen(false)}
+        onSubmit={onVouch}
+      />
     </View>
+  );
+}
+
+// One vouch per person, tied to a category — "I stand behind him as a framer".
+function VouchModal({
+  visible,
+  name,
+  categories,
+  onClose,
+  onSubmit,
+}: {
+  visible: boolean;
+  name: string;
+  categories: CategoryId[];
+  onClose: () => void;
+  onSubmit: (category: CategoryId, comment: string) => void;
+}) {
+  const [category, setCategory] = useState<CategoryId | null>(null);
+  const [comment, setComment] = useState("");
+  const picked = category ?? categories[0] ?? null;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Vouch for {name}</Text>
+          <Text style={styles.modalHint}>
+            Your name goes on it. Only vouch for someone you've actually worked with.
+          </Text>
+          <View style={styles.modalChips}>
+            {categories.map((c) => {
+              const active = picked === c;
+              return (
+                <PressableScale
+                  key={c}
+                  onPress={() => setCategory(c)}
+                  style={[
+                    styles.modalChip,
+                    {
+                      borderColor: active ? colors.safety : colors.line,
+                      backgroundColor: active ? colors.safetyBg : colors.card,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.modalChipText, { color: active ? colors.safetyInk : colors.inkMid }]}>
+                    {categoryLabel(c)}
+                  </Text>
+                </PressableScale>
+              );
+            })}
+          </View>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Framed two houses together in Stittsville… (optional)"
+            placeholderTextColor={colors.inkLo}
+            value={comment}
+            onChangeText={setComment}
+            multiline
+          />
+          <PressableScale
+            style={[styles.modalBtn, { opacity: picked ? 1 : 0.5 }]}
+            disabled={!picked}
+            onPress={() => picked && onSubmit(picked, comment.trim())}
+          >
+            <Text style={styles.modalBtnText}>Vouch</Text>
+          </PressableScale>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -246,13 +397,26 @@ const styles = StyleSheet.create({
   trustText: { flex: 1, borderLeftWidth: 1, borderLeftColor: colors.goodLine, paddingLeft: 14 },
   trustTitle: { fontSize: 13, fontWeight: "700", color: "#0a6b41" },
   trustBody: { fontSize: 11.5, color: "#3c7a5a", marginTop: 2, lineHeight: 16 },
+  actionRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 14 },
   messageBtn: {
+    flex: 1,
     backgroundColor: colors.safety,
     borderRadius: 10,
     paddingVertical: 13,
     alignItems: "center",
   },
   messageText: { color: colors.white, fontFamily: fonts.display, fontSize: 14.5 },
+  vouchBtn: {
+    borderWidth: 1,
+    borderColor: colors.safety,
+    borderRadius: 10,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    alignItems: "center",
+  },
+  vouchBtnText: { color: colors.safetyInk, fontFamily: fonts.display, fontSize: 14.5 },
+  vouchBtnDone: { backgroundColor: colors.goodBg, borderColor: colors.goodLine },
+  vouchBtnTextDone: { color: colors.good },
   sectionTitle: {
     fontFamily: fonts.display,
     fontSize: 13,
@@ -264,6 +428,22 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
   },
+  vouchCard: {
+    marginHorizontal: 14,
+    marginBottom: 9,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    padding: 13,
+    flexDirection: "row",
+    gap: 9,
+  },
+  vouchNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  vouchName: { fontSize: 12.5, fontWeight: "700", color: colors.ink },
+  vouchTrust: { fontSize: 11, color: colors.good, fontWeight: "700" },
+  vouchMeta: { fontSize: 10.5, color: colors.inkLo, marginTop: 1 },
+  vouchComment: { fontSize: 12.5, color: colors.inkMid, lineHeight: 17, marginTop: 6 },
   noRefs: { paddingHorizontal: 18, fontSize: 12.5, color: colors.inkLo },
   refCard: {
     marginHorizontal: 14,
@@ -291,4 +471,44 @@ const styles = StyleSheet.create({
   },
   gridLabel: { fontSize: 11, color: colors.white, fontWeight: "700", textShadowColor: "rgba(0,0,0,.4)", textShadowRadius: 3 },
   sampleNote: { paddingHorizontal: 18, paddingTop: 8, fontSize: 10.5, color: colors.inkLo, lineHeight: 15 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(30,27,24,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 18,
+    width: "100%",
+    maxWidth: 380,
+  },
+  modalTitle: { fontFamily: fonts.display, fontSize: 17, color: colors.ink },
+  modalHint: { fontSize: 11.5, color: colors.inkLo, marginTop: 8, lineHeight: 16 },
+  modalChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  modalChip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 16, borderWidth: 1 },
+  modalChipText: { fontSize: 12.5, fontWeight: "700" },
+  modalInput: {
+    marginTop: 12,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    color: colors.ink,
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
+  modalBtn: {
+    marginTop: 14,
+    backgroundColor: colors.safety,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  modalBtnText: { color: colors.white, fontFamily: fonts.display, fontSize: 14 },
 });

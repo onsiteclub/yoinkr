@@ -1,18 +1,29 @@
 import { StyleSheet, Text, View } from "react-native";
 import { colors } from "@/theme/colors";
 
-// Inline trust readout: "★ 4.8 · 23 closed". Shown wherever a person appears
-// (feed cards, chat list/header, profile) — HANDOFF.md §4.
-export function TrustInline({ trust, dealsClosed }: { trust: number; dealsClosed: number }) {
-  const isNew = dealsClosed === 0;
+// Inline trust readout, shown wherever a person appears (feed cards, chat
+// list/header, profile). The average only exists at 3+ ratings (trust=null
+// below that — server rule), so the display degrades honestly:
+//   "★ 4.8 · 23 closed" → "5 closed" (no avg yet) → "NEW" (nothing yet).
+export function TrustInline({
+  trust,
+  dealsClosed,
+}: {
+  trust: number | null;
+  dealsClosed: number;
+}) {
+  const isNew = trust == null && dealsClosed === 0;
   return (
     <View style={styles.row}>
       {isNew ? (
         <Text style={styles.newBadge}>NEW</Text>
       ) : (
         <>
-          <Text style={styles.star}>★ {trust.toFixed(1)}</Text>
-          <Text style={styles.muted}>· {dealsClosed} closed</Text>
+          {trust != null && <Text style={styles.star}>★ {trust.toFixed(1)}</Text>}
+          <Text style={styles.muted}>
+            {trust != null ? "· " : ""}
+            {dealsClosed} closed
+          </Text>
         </>
       )}
     </View>

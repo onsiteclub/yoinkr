@@ -1,20 +1,27 @@
-// Domain types. These mirror the Supabase schema in HANDOFF.md §5 so that
-// swapping the mock repository for real Supabase queries later is a drop-in.
-import type { TradeId } from "./trades";
+// Domain types. These mirror the yoinkr schema on onsite-core so the
+// repository mapping stays a thin translation layer.
+import type { CategoryId, PayModel } from "./categories";
 
 // A listing is either an employer's JOB, a WORKER advertising availability, or
-// a TOOL for sale (the secondary "plus"). Jobs and workers carry a trade.
+// a TOOL for sale (the secondary "plus"). Jobs and workers carry a category.
 export type ListingType = "job" | "tool" | "available";
 
+// Reputation numbers come from the profile_stats view, never stored on the
+// profile row. trustScore is null until 3 ratings exist (server-enforced).
 export interface Profile {
   id: string;
   fullName: string;
-  trade: string; // "Framing", "Drywall", "Electrical", "Roofing", ...
+  categories: CategoryId[]; // what they do — profile checkboxes, many allowed
   yearsExp: number;
   region: string; // "Ottawa, ON"
   available: boolean;
-  trustScore: number; // aggregate, recomputed from ratings
+  acceptsHourly: boolean;
+  acceptsPiecework: boolean;
+  crewSize: number; // 1 = solo, 2 = duo
+  trustScore: number | null; // avg stars; null until 3+ ratings
+  ratingCount: number;
   dealsClosed: number;
+  vouchCount: number;
   verified?: boolean;
   hoursVerified?: number; // aspirational / phase-2 (OnSite Timekeeper)
   createdAt: string;
@@ -24,21 +31,23 @@ export interface Listing {
   id: string;
   authorId: string;
   type: ListingType;
-  trade: TradeId | null; // set for job/worker; null for tools
+  category: CategoryId | null; // set for job/worker; null for tools
+  payModel: PayModel | null; // general_labour listings are always hourly
+  rate: number | null; // $/hr, $/sqft or total $, per payModel
+  sqft: number | null; // job size — piecework listings
+  crewSize: number; // crew needed (jobs) / crew offered (workers)
+  pay: string; // display string composed from payModel + rate
   title: string;
-  pay: string; // free text — "$34/hr", "$180"
   detail: string; // short extra ("weekend", "1 day", "used, 2 batteries")
   city: string; // region gate — Ottawa only at launch
   location: string; // neighbourhood within the city ("Kanata", "Nepean")
   distanceKm?: number; // distance from the viewer — decisive hiring factor.
-  // Mocked for now; later computed from listing coords vs user location.
   urgent: boolean;
-  photoUrl: string | null; // Supabase Storage path; null => gradient placeholder
+  photoUrl: string | null; // Supabase Storage path; null => category artwork
   status: "open" | "closed";
   createdAt: string;
-  // Denormalized author info for fast feed rendering (joined from profiles).
+  // Denormalized author info for fast feed rendering.
   author: Pick<Profile, "fullName" | "trustScore" | "dealsClosed" | "verified">;
-  // Human-friendly relative time for the mock; server can compute from createdAt.
   when: string;
   // Application state, denormalized for the feed (jobs only).
   applicants?: number; // how many applied (shown to the job's author)
@@ -46,8 +55,7 @@ export interface Listing {
   mine?: boolean; // authored by the current user (computed by the repository)
 }
 
-// A worker's application to a job — the Upwork/Workana-style lightweight
-// proposal: a short message plus an optional proposed rate.
+// A worker's application to a job — a short message plus an optional rate.
 export interface Application {
   id: string;
   listingId: string;
@@ -57,8 +65,34 @@ export interface Application {
   status: "pending" | "accepted" | "declined";
   when: string;
   createdAt: string;
-  // Denormalized applicant info for the applicants list.
-  applicant: Pick<Profile, "fullName" | "trade" | "yearsExp" | "trustScore" | "dealsClosed" | "verified">;
+  applicant: Pick<
+    Profile,
+    "fullName" | "categories" | "yearsExp" | "trustScore" | "dealsClosed" | "verified"
+  >;
+}
+
+// The Uber-style loop: accepting an application creates the deal ('agreed');
+// either party marks the work 'done'; both double-blind ratings in → 'rated'.
+export interface Deal {
+  id: string;
+  listingId: string | null;
+  applicationId: string | null;
+  workerId: string;
+  hirerId: string;
+  state: "agreed" | "done" | "rated";
+  createdAt: string;
+}
+
+// A named peer endorsement — "vouched by Ahmad (Framer)". Social signal on
+// the profile, deliberately separate from the star average.
+export interface Vouch {
+  id: string;
+  voucherId: string;
+  voucheeId: string;
+  category: CategoryId;
+  comment: string;
+  when: string;
+  voucher: Pick<Profile, "fullName" | "trustScore" | "verified">;
 }
 
 export interface Conversation {
@@ -84,13 +118,12 @@ export interface PortfolioPhoto {
   caption: string;
 }
 
-// A reference = a rating left after a closed deal (Uber-style: stars + short
-// comment + who left it). Shown on the public worker profile.
+// A reference = a rating left after a done deal (stars + short comment + who
+// left it). The server only reveals it once both sides rated (or 14 days pass).
 export interface Reference {
   id: string;
   profileId: string; // who this reference is about
   raterName: string;
-  raterTrust: number;
   stars: number; // 1..5
   comment: string;
   when: string;
@@ -101,9 +134,10 @@ export interface ChatSummary {
   id: string; // conversation id
   conversationId: string;
   otherId: string; // the other participant's profile id
+  listingId: string | null; // listing the conversation is about (deal lookup)
   name: string;
   avatar: string;
-  trust: number;
+  trust: number | null;
   lastMessage: string;
   when: string;
   unread: number;

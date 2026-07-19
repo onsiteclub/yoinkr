@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,31 +12,60 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LogoMark } from "@/components/Logo";
 import { PressableScale } from "@/components/PressableScale";
-import { updateMyProfile } from "@/data/repository";
-import { TRADES, tradeLabel, type TradeId } from "@/data/trades";
+import { CATEGORIES, type CategoryId, allowsPiecework } from "@/data/categories";
+import { getMyProfile, updateMyProfile } from "@/data/repository";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
 
-// First-run profile setup. Anonymous users are created as "New worker" with no
-// trade — this screen gives them a face before they yoink or message anyone.
-// Three fields, no friction; skippable ("Later") since browsing works without it.
+// Profile setup (first run) and profile edit (from the Profile tab). LinkedIn
+// pre-registered style: what you do and what you take are checkboxes, not free
+// text — a person holds many categories; skippable since browsing works
+// without it. Prefills from the existing profile so editing is the same screen.
 export default function SetupScreen() {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
-  const [trade, setTrade] = useState<TradeId | null>(null);
+  const [categories, setCategories] = useState<CategoryId[]>([]);
   const [years, setYears] = useState("");
+  const [acceptsHourly, setAcceptsHourly] = useState(true);
+  const [acceptsPiecework, setAcceptsPiecework] = useState(false);
+  const [crewSize, setCrewSize] = useState(1);
   const [saving, setSaving] = useState(false);
 
-  const canSave = name.trim().length >= 2 && trade !== null && !saving;
+  useEffect(() => {
+    getMyProfile()
+      .then((p) => {
+        if (p.fullName !== "New worker") setName(p.fullName);
+        setCategories(p.categories);
+        if (p.yearsExp > 0) setYears(String(p.yearsExp));
+        setAcceptsHourly(p.acceptsHourly);
+        setAcceptsPiecework(p.acceptsPiecework);
+        setCrewSize(p.crewSize);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Piecework only exists for the skilled categories — if none is selected,
+  // the preference has nothing to apply to.
+  const canPiecework = categories.some((c) => allowsPiecework(c));
+  const canSave = name.trim().length >= 2 && categories.length > 0 && !saving;
+
+  const toggleCategory = (id: CategoryId) => {
+    setCategories((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    );
+  };
 
   const save = async () => {
-    if (!canSave || !trade) return;
+    if (!canSave) return;
     setSaving(true);
     try {
       await updateMyProfile({
         fullName: name.trim(),
-        trade: tradeLabel(trade),
+        categories,
         yearsExp: Math.max(0, parseInt(years, 10) || 0),
+        acceptsHourly,
+        acceptsPiecework: acceptsPiecework && canPiecework,
+        crewSize,
       });
       router.back();
     } finally {
@@ -52,7 +81,7 @@ export default function SetupScreen() {
             <LogoMark size={44} />
             <Text style={styles.title}>Set up your profile</Text>
             <Text style={styles.subtitle}>
-              Your name and trade show on everything you post — it's how hirers decide.
+              What you do shows on everything you post — it's how hirers decide.
             </Text>
           </View>
 
@@ -66,28 +95,53 @@ export default function SetupScreen() {
             autoCapitalize="words"
           />
 
-          <Text style={[styles.label, { marginTop: 18 }]}>Your trade</Text>
-          <View style={styles.tradeWrap}>
-            {TRADES.map((t) => {
-              const active = trade === t.id;
+          <Text style={[styles.label, { marginTop: 18 }]}>What you do — pick all that apply</Text>
+          <View style={styles.chipWrap}>
+            {CATEGORIES.map((c) => {
+              const active = categories.includes(c.id);
               return (
                 <PressableScale
-                  key={t.id}
-                  onPress={() => setTrade(t.id)}
+                  key={c.id}
+                  onPress={() => toggleCategory(c.id)}
                   style={[
-                    styles.tradeChip,
+                    styles.chip,
                     {
                       borderColor: active ? colors.accent : colors.border,
                       backgroundColor: active ? colors.accentTint : colors.surface,
                     },
                   ]}
                 >
-                  <Text style={[styles.tradeText, { color: active ? colors.accentDark : colors.secondary }]}>
-                    {t.label}
+                  <Text style={[styles.chipText, { color: active ? colors.accentDark : colors.secondary }]}>
+                    {active ? "✓ " : ""}
+                    {c.label}
                   </Text>
                 </PressableScale>
               );
             })}
+          </View>
+
+          <Text style={[styles.label, { marginTop: 18 }]}>Work you take</Text>
+          <View style={styles.chipWrap}>
+            <PrefChip
+              label="Hourly"
+              active={acceptsHourly}
+              onPress={() => setAcceptsHourly((v) => !v)}
+            />
+            <PrefChip
+              label="Piecework ($/sqft · fixed)"
+              active={acceptsPiecework && canPiecework}
+              disabled={!canPiecework}
+              onPress={() => setAcceptsPiecework((v) => !v)}
+            />
+          </View>
+          {!canPiecework && categories.length > 0 && (
+            <Text style={styles.hint}>General labour is hourly-only.</Text>
+          )}
+
+          <Text style={[styles.label, { marginTop: 18 }]}>You work…</Text>
+          <View style={styles.chipWrap}>
+            <PrefChip label="Solo" active={crewSize === 1} onPress={() => setCrewSize(1)} />
+            <PrefChip label="As a duo" active={crewSize === 2} onPress={() => setCrewSize(2)} />
           </View>
 
           <Text style={[styles.label, { marginTop: 18 }]}>Years of experience</Text>
@@ -115,6 +169,38 @@ export default function SetupScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
+  );
+}
+
+function PrefChip({
+  label,
+  active,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        styles.chip,
+        {
+          opacity: disabled ? 0.4 : 1,
+          borderColor: active ? colors.accent : colors.border,
+          backgroundColor: active ? colors.accentTint : colors.surface,
+        },
+      ]}
+    >
+      <Text style={[styles.chipText, { color: active ? colors.accentDark : colors.secondary }]}>
+        {active ? "✓ " : ""}
+        {label}
+      </Text>
+    </PressableScale>
   );
 }
 
@@ -155,9 +241,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.inkBrand,
   },
-  tradeWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  tradeChip: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 18, borderWidth: 1.5 },
-  tradeText: { fontSize: 13, fontFamily: fonts.bodySemi },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 18, borderWidth: 1.5 },
+  chipText: { fontSize: 13, fontFamily: fonts.bodySemi },
+  hint: { fontSize: 11.5, color: colors.tertiary, marginTop: 6 },
   cta: {
     marginTop: 28,
     backgroundColor: colors.accent,

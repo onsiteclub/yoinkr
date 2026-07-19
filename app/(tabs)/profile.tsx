@@ -1,4 +1,4 @@
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Avatar } from "@/components/Avatar";
@@ -7,9 +7,9 @@ import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
 import { SamplePill, TradeArt } from "@/components/TradeArt";
 import { Verified } from "@/components/Verified";
+import { categoryLabel, categoryLabels } from "@/data/categories";
 import { addPortfolioPhoto } from "@/data/photos";
 import { getMyProfile, getPortfolio, setAvailability } from "@/data/repository";
-import { tradeIdFromLabel } from "@/data/trades";
 import type { PortfolioPhoto, Profile } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
@@ -34,7 +34,7 @@ export default function ProfileScreen() {
     setMe({ ...next });
   };
 
-  const myTradeId = tradeIdFromLabel(me?.trade);
+  const myCategory = me?.categories[0] ?? null;
 
   const onAddPhoto = async () => {
     try {
@@ -73,27 +73,45 @@ export default function ProfileScreen() {
               <Text style={styles.name}>{me.fullName}</Text>
               {me.verified && <Verified />}
             </View>
-            <Text style={styles.trade}>{me.trade}</Text>
+            <Text style={styles.trade}>
+              {categoryLabels(me.categories) || "Set up your categories"}
+              {me.crewSize === 2 ? " · duo" : ""}
+            </Text>
             <Text style={styles.region}>📍 {me.region}</Text>
           </View>
+          <PressableScale onPress={() => router.push("/setup")} hitSlop={8}>
+            <Text style={styles.editLink}>Edit</Text>
+          </PressableScale>
         </View>
 
-        {/* trust badge */}
+        {/* trust badge — the avg only exists at 3+ ratings (server rule) */}
         <View style={styles.trustBadge}>
           <View style={styles.trustScoreCol}>
-            <Text style={styles.trustScore}>{me.trustScore.toFixed(1)}</Text>
-            <Text style={styles.trustStars}>★★★★★</Text>
+            {me.trustScore != null ? (
+              <>
+                <Text style={styles.trustScore}>{me.trustScore.toFixed(1)}</Text>
+                <Text style={styles.trustStars}>★★★★★</Text>
+              </>
+            ) : (
+              <Text style={styles.newBadge}>NEW</Text>
+            )}
           </View>
           <View style={styles.trustText}>
-            <Text style={styles.trustTitle}>High trust</Text>
+            <Text style={styles.trustTitle}>
+              {me.trustScore != null ? "Trusted" : "Building your reputation"}
+            </Text>
             <Text style={styles.trustBody}>
-              {me.dealsClosed} jobs closed in-app · always shows up · pays/gets paid on time
+              {me.trustScore != null
+                ? `${me.dealsClosed} jobs closed in-app · rated by real hirers`
+                : me.ratingCount > 0
+                  ? `${me.ratingCount} rating${me.ratingCount > 1 ? "s" : ""} — your average shows at 3`
+                  : "Close deals inside the app and both sides rate each other"}
             </Text>
           </View>
         </View>
         <Text style={styles.trustNote}>
           Your score grows with every job closed <Text style={{ fontWeight: "700" }}>inside the app</Text> — both
-          sides, worker and hirer.
+          sides, worker and hirer. Vouches from other pros ({me.vouchCount}) count separately.
         </Text>
 
         {/* stats */}
@@ -135,18 +153,18 @@ export default function ProfileScreen() {
               <Text style={styles.gridLabel}>{p.caption}</Text>
             </Placeholder>
           ))}
-          {/* Trade-default art until the user adds real work photos. */}
+          {/* Category-default art until the user adds real work photos. */}
           {portfolio.length === 0 &&
-            myTradeId &&
+            myCategory &&
             [0, 1, 2].map((v) => (
-              <TradeArt key={v} trade={myTradeId} variant={v} style={styles.gridItem}>
+              <TradeArt key={v} category={myCategory} variant={v} style={styles.gridItem}>
                 <SamplePill />
               </TradeArt>
             ))}
         </View>
-        {portfolio.length === 0 && myTradeId && (
+        {portfolio.length === 0 && myCategory && (
           <Text style={styles.sampleNote}>
-            Sample {me.trade} images — add photos of your own work to stand out.
+            Sample {categoryLabel(myCategory)} images — add photos of your own work to stand out.
           </Text>
         )}
       </ScrollView>
@@ -190,6 +208,18 @@ const styles = StyleSheet.create({
   name: { fontSize: 20, fontWeight: "700", color: colors.ink },
   trade: { fontSize: 13.5, color: colors.inkMid, marginTop: 2 },
   region: { fontSize: 12, color: colors.inkLo, marginTop: 2 },
+  editLink: { fontSize: 12.5, color: colors.blue, fontWeight: "700" },
+  newBadge: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.safetyInk,
+    backgroundColor: colors.safetyBg,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    overflow: "hidden",
+    letterSpacing: 1,
+  },
   trustBadge: {
     margin: 14,
     marginBottom: 0,

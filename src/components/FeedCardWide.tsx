@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
-import { tradeLabel } from "@/data/trades";
+import { categoryLabel } from "@/data/categories";
 import type { Listing } from "@/data/types";
 import { Avatar } from "./Avatar";
 import { TypeBadge, UrgentBadge } from "./Badge";
@@ -40,7 +40,7 @@ export function FeedCardWide({
       {/* photo (left) */}
       <Placeholder
         photoUrl={listing.photoUrl}
-        trade={listing.trade}
+        category={listing.category}
         seed={listing.id}
         style={styles.photo}
       >
@@ -54,9 +54,9 @@ export function FeedCardWide({
       <View style={styles.body}>
         <View style={styles.headRow}>
           <Text style={styles.pay}>{listing.pay}</Text>
-          {listing.trade && (
+          {listing.category && (
             <View style={styles.tradeTag}>
-              <Text style={styles.tradeTagText}>{tradeLabel(listing.trade)}</Text>
+              <Text style={styles.tradeTagText}>{categoryLabel(listing.category)}</Text>
             </View>
           )}
         </View>

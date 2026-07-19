@@ -15,7 +15,12 @@ import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
 import { pickAndUploadPhoto } from "@/data/photos";
 import { createListing } from "@/data/repository";
-import { TRADES, type TradeId } from "@/data/trades";
+import {
+  CATEGORIES,
+  type CategoryId,
+  type PayModel,
+  allowsPiecework,
+} from "@/data/categories";
 import type { ListingType } from "@/data/types";
 import { useRegion } from "@/store/useRegion";
 import { colors } from "@/theme/colors";
@@ -27,13 +32,19 @@ const TYPES: { key: ListingType; label: string }[] = [
   { key: "tool", label: "Tool" },
 ];
 
+// The category decides how pay works: any category can be hourly; $/sqft and
+// fixed price exist only for the skilled three (general labour is hourly-only,
+// enforced here and by a DB check). Tools are just a fixed price.
 export default function PostScreen() {
   const insets = useSafeAreaInsets();
   const city = useRegion((s) => s.city);
   const [type, setType] = useState<ListingType>("job");
-  const [trade, setTrade] = useState<TradeId>("framing");
+  const [category, setCategory] = useState<CategoryId>("framing");
+  const [payModel, setPayModel] = useState<PayModel>("hourly");
+  const [rate, setRate] = useState("");
+  const [sqft, setSqft] = useState("");
+  const [crewSize, setCrewSize] = useState(1);
   const [title, setTitle] = useState("");
-  const [pay, setPay] = useState("");
   const [detail, setDetail] = useState("");
   const [location, setLocation] = useState("");
   const [urgent, setUrgent] = useState(false);
@@ -41,10 +52,27 @@ export default function PostScreen() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const needsTrade = type !== "tool";
+  const isTool = type === "tool";
+  const effectiveModel: PayModel = isTool ? "fixed" : payModel;
+  const pieceworkOk = !isTool && allowsPiecework(category);
+
+  const pickCategory = (id: CategoryId) => {
+    setCategory(id);
+    if (!allowsPiecework(id)) setPayModel("hourly");
+  };
+
   // Real titles only — blocks junk like "44" from reaching the feed.
   const titleOk = title.trim().length >= 4 && !/^\d+$/.test(title.trim());
-  const canPost = titleOk && !saving && !uploading;
+  const rateNum = parseFloat(rate.replace(",", "."));
+  const rateOk = Number.isFinite(rateNum) && rateNum > 0;
+  const sqftNum = parseInt(sqft, 10);
+  const sqftOk = effectiveModel !== "per_sqft" || (Number.isFinite(sqftNum) && sqftNum > 0);
+  const canPost = titleOk && rateOk && sqftOk && !saving && !uploading;
+
+  const rateLabel =
+    effectiveModel === "hourly" ? "Rate ($/hr)" : effectiveModel === "per_sqft" ? "Rate ($/sqft)" : "Price ($)";
+  const ratePlaceholder =
+    effectiveModel === "hourly" ? "34" : effectiveModel === "per_sqft" ? "2.10" : "2400";
 
   const addPhoto = async () => {
     try {
@@ -63,9 +91,12 @@ export default function PostScreen() {
     setSaving(true);
     await createListing({
       type,
-      trade: needsTrade ? trade : null,
+      category: isTool ? null : category,
+      payModel: effectiveModel,
+      rate: rateNum,
+      sqft: Number.isFinite(sqftNum) && sqftNum > 0 ? sqftNum : null,
+      crewSize: isTool ? 1 : crewSize,
       title: title.trim(),
-      pay: pay.trim() || "—",
       detail: detail.trim(),
       city,
       location: location.trim() || "Ottawa area",
@@ -109,23 +140,74 @@ export default function PostScreen() {
             })}
           </View>
 
-          {/* trade selector (jobs & workers) */}
-          {needsTrade && (
+          {/* category selector (jobs & workers) */}
+          {!isTool && (
             <View style={{ marginTop: 16 }}>
-              <Text style={styles.label}>Trade</Text>
+              <Text style={styles.label}>Category</Text>
               <View style={styles.tradeWrap}>
-                {TRADES.map((t) => {
-                  const active = trade === t.id;
+                {CATEGORIES.map((c) => {
+                  const active = category === c.id;
                   return (
                     <PressableScale
-                      key={t.id}
-                      onPress={() => setTrade(t.id)}
+                      key={c.id}
+                      onPress={() => pickCategory(c.id)}
                       style={[styles.tradeChip, { borderColor: active ? colors.safety : colors.line, backgroundColor: active ? colors.safetyBg : colors.card }]}
                     >
-                      <Text style={[styles.tradeChipText, { color: active ? colors.safetyInk : colors.inkMid }]}>{t.label}</Text>
+                      <Text style={[styles.tradeChipText, { color: active ? colors.safetyInk : colors.inkMid }]}>{c.label}</Text>
                     </PressableScale>
                   );
                 })}
+              </View>
+            </View>
+          )}
+
+          {/* pay model — hourly for everyone; piecework only for skilled categories */}
+          {!isTool && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={styles.label}>Pay</Text>
+              <View style={styles.typeRow}>
+                <PayChip label="Hourly" active={payModel === "hourly"} onPress={() => setPayModel("hourly")} />
+                {pieceworkOk && (
+                  <>
+                    <PayChip label="Per sqft" active={payModel === "per_sqft"} onPress={() => setPayModel("per_sqft")} />
+                    <PayChip label="Fixed" active={payModel === "fixed"} onPress={() => setPayModel("fixed")} />
+                  </>
+                )}
+              </View>
+              {!pieceworkOk && <Text style={styles.hint}>General labour is hourly-only.</Text>}
+            </View>
+          )}
+
+          <View style={styles.payRow}>
+            <View style={{ flex: 1 }}>
+              <Field
+                label={rateLabel}
+                value={rate}
+                onChangeText={(v: string) => setRate(v.replace(/[^0-9.,]/g, ""))}
+                placeholder={ratePlaceholder}
+                keyboardType="decimal-pad"
+              />
+            </View>
+            {!isTool && effectiveModel !== "hourly" && (
+              <View style={{ flex: 1 }}>
+                <Field
+                  label={effectiveModel === "per_sqft" ? "Job size (sqft)" : "Sqft (optional)"}
+                  value={sqft}
+                  onChangeText={(v: string) => setSqft(v.replace(/[^0-9]/g, ""))}
+                  placeholder="1850"
+                  keyboardType="number-pad"
+                />
+              </View>
+            )}
+          </View>
+
+          {/* crew — piecework framers run solo or in twos */}
+          {!isTool && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={styles.label}>{type === "job" ? "Crew needed" : "Crew"}</Text>
+              <View style={styles.typeRow}>
+                <PayChip label="Solo" active={crewSize === 1} onPress={() => setCrewSize(1)} />
+                <PayChip label="2-man" active={crewSize === 2} onPress={() => setCrewSize(2)} />
               </View>
             </View>
           )}
@@ -140,7 +222,6 @@ export default function PostScreen() {
           </View>
 
           <Field label="Title" value={title} onChangeText={setTitle} placeholder="2 framers — starts Saturday 7am" />
-          <Field label="Pay" value={pay} onChangeText={setPay} placeholder="$34/hr" />
           <Field label="Detail" value={detail} onChangeText={setDetail} placeholder="weekend · 1 day · used, 2 batteries" />
           <Field label="Location" value={location} onChangeText={setLocation} placeholder="Kanata" />
 
@@ -187,6 +268,20 @@ export default function PostScreen() {
   );
 }
 
+function PayChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      style={[
+        styles.typeChip,
+        { borderColor: active ? colors.ink : colors.line, backgroundColor: active ? colors.ink : colors.card },
+      ]}
+    >
+      <Text style={[styles.typeText, { color: active ? colors.white : colors.inkMid }]}>{label}</Text>
+    </PressableScale>
+  );
+}
+
 function Field({
   label,
   ...props
@@ -223,12 +318,14 @@ const styles = StyleSheet.create({
   post: { fontSize: 15, fontWeight: "800" },
   form: { padding: 18, paddingBottom: 40 },
   label: { fontSize: 12, fontWeight: "700", color: colors.inkMid, textTransform: "uppercase", letterSpacing: 0.4 },
+  hint: { fontSize: 11.5, color: colors.inkLo, marginTop: 6 },
   typeRow: { flexDirection: "row", gap: 8, marginTop: 8 },
   typeChip: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, alignItems: "center" },
   typeText: { fontSize: 13, fontWeight: "700" },
   tradeWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   tradeChip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 16, borderWidth: 1 },
   tradeChipText: { fontSize: 12.5, fontWeight: "700" },
+  payRow: { flexDirection: "row", gap: 10 },
   regionPill: {
     marginTop: 8,
     flexDirection: "row",

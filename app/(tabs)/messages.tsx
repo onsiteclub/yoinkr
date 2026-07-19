@@ -46,7 +46,7 @@ export default function MessagesScreen() {
               <View style={styles.topLine}>
                 <View style={styles.nameWrap}>
                   <Text style={styles.name}>{c.name}</Text>
-                  <Text style={styles.trust}>★{c.trust}</Text>
+                  {c.trust != null && <Text style={styles.trust}>★{c.trust.toFixed(1)}</Text>}
                 </View>
                 <Text style={styles.when}>{c.when}</Text>
               </View>

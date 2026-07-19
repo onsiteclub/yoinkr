@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { TypeFilter } from "@/data/repository";
-import { TRADES, tradeLabel } from "@/data/trades";
+import { CATEGORIES, categoryLabel } from "@/data/categories";
 import { useResponsive } from "@/lib/responsive";
 import { useFeedFilter } from "@/store/useFeedFilter";
 import { colors } from "@/theme/colors";
@@ -10,8 +10,8 @@ import { PressableScale } from "./PressableScale";
 
 // Feed filters, one pattern per breakpoint (marketplace convention —
 // FB Marketplace / Kijiji / Airbnb):
-// - mobile/tablet: ONE compact row — type chips + a "Trade ▾" chip that opens
-//   a sheet with every trade (FeedFilterBar + TradeSheet).
+// - mobile/tablet: ONE compact row — type chips + a "Category ▾" chip that
+//   opens a sheet with every framing category (FeedFilterBar + CategorySheet).
 // - desktop: the filters live in the left sidebar as grouped lists
 //   (SidebarFilters, rendered by SideNav on the Jobs route only).
 // State is shared via useFeedFilter so all surfaces stay in sync.
@@ -21,9 +21,9 @@ const TYPES: TypeFilter[] = ["All", "Jobs", "Workers", "Tools"];
 // --- mobile / tablet: single-row bar --------------------------------------
 
 export function FeedFilterBar() {
-  const { type, trade, setType } = useFeedFilter();
+  const { type, category, setType } = useFeedFilter();
   const [sheetOpen, setSheetOpen] = useState(false);
-  const tradeActive = trade !== "All";
+  const categoryActive = category !== "All";
 
   return (
     <View style={bar.block}>
@@ -49,33 +49,33 @@ export function FeedFilterBar() {
 
         <PressableScale
           onPress={() => setSheetOpen(true)}
-          style={[bar.chip, bar.tradeChip, tradeActive && bar.tradeChipActive]}
+          style={[bar.chip, bar.tradeChip, categoryActive && bar.tradeChipActive]}
         >
-          <Text style={[bar.chipText, tradeActive && bar.tradeChipTextActive]}>
-            {tradeActive ? tradeLabel(trade) : "Trade"} ▾
+          <Text style={[bar.chipText, categoryActive && bar.tradeChipTextActive]}>
+            {categoryActive ? categoryLabel(category) : "Category"} ▾
           </Text>
         </PressableScale>
       </ScrollView>
 
-      <TradeSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <CategorySheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
     </View>
   );
 }
 
-// --- trade picker sheet (bottom sheet on mobile, centered card on md+) -----
+// --- category picker sheet (bottom sheet on mobile, centered card on md+) --
 
-function TradeSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { trade, setTrade } = useFeedFilter();
+function CategorySheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { category, setCategory } = useFeedFilter();
   const { isMobile } = useResponsive();
 
-  const pick = (t: typeof trade) => {
-    setTrade(t);
+  const pick = (c: typeof category) => {
+    setCategory(c);
     onClose();
   };
 
-  const options: { key: typeof trade; label: string }[] = [
-    { key: "All", label: "All trades" },
-    ...TRADES.map((t) => ({ key: t.id as typeof trade, label: t.label })),
+  const options: { key: typeof category; label: string }[] = [
+    { key: "All", label: "All categories" },
+    ...CATEGORIES.map((c) => ({ key: c.id as typeof category, label: c.label })),
   ];
 
   return (
@@ -83,9 +83,9 @@ function TradeSheet({ visible, onClose }: { visible: boolean; onClose: () => voi
       <Pressable style={[sheet.backdrop, !isMobile && sheet.backdropCenter]} onPress={onClose}>
         {/* Stop backdrop-press from closing when tapping the card itself. */}
         <Pressable style={[sheet.card, isMobile ? sheet.cardBottom : sheet.cardFloating]}>
-          <Text style={sheet.title}>Trade</Text>
+          <Text style={sheet.title}>Category</Text>
           {options.map((o) => {
-            const active = trade === o.key;
+            const active = category === o.key;
             return (
               <PressableScale
                 key={o.key}
@@ -106,7 +106,7 @@ function TradeSheet({ visible, onClose }: { visible: boolean; onClose: () => voi
 // --- desktop: sidebar filter panel -----------------------------------------
 
 export function SidebarFilters() {
-  const { type, trade, setType, setTrade } = useFeedFilter();
+  const { type, category, setType, setCategory } = useFeedFilter();
 
   return (
     <View style={panel.wrap}>
@@ -115,14 +115,14 @@ export function SidebarFilters() {
         <PanelRow key={k} label={k} active={type === k} onPress={() => setType(k)} />
       ))}
 
-      <Text style={[panel.heading, panel.headingGap]}>Trade</Text>
-      <PanelRow label="All trades" active={trade === "All"} onPress={() => setTrade("All")} />
-      {TRADES.map((t) => (
+      <Text style={[panel.heading, panel.headingGap]}>Category</Text>
+      <PanelRow label="All categories" active={category === "All"} onPress={() => setCategory("All")} />
+      {CATEGORIES.map((c) => (
         <PanelRow
-          key={t.id}
-          label={t.label}
-          active={trade === t.id}
-          onPress={() => setTrade(t.id)}
+          key={c.id}
+          label={c.label}
+          active={category === c.id}
+          onPress={() => setCategory(c.id)}
         />
       ))}
     </View>

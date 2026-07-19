@@ -2,15 +2,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { ReactElement } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
-import type { TradeId } from "@/data/trades";
+import type { CategoryId } from "@/data/categories";
 import { fonts } from "@/theme/fonts";
 
-// Trade-default artwork: when a listing or portfolio has no real photo, we
-// show a scene drawn for that trade (roof for roofing, bulkhead for
-// backframe, ...) instead of an anonymous gradient. Line-art over a muted
-// gradient — obviously an illustration, never passing as the worker's own
-// photo (trust rule). 3 variants per trade; pick is deterministic by `seed`
-// (or explicit `variant`) so the same card always shows the same art.
+// Category-default artwork: when a listing or portfolio has no real photo, we
+// show a scene drawn for that framing category (roof for roof framing,
+// bulkhead for backframing, ...) instead of an anonymous gradient. Line-art
+// over a muted gradient — obviously an illustration, never passing as the
+// worker's own photo (trust rule). 3 variants per category; pick is
+// deterministic by `seed` (or explicit `variant`) so the same card always
+// shows the same art.
 
 const W = "#FFFFFF";
 const thin = { stroke: W, strokeOpacity: 0.5, strokeWidth: 2, fill: "none" as const };
@@ -20,7 +21,7 @@ const fillSoft = { fill: W, fillOpacity: 0.12 };
 type Scene = { gradient: [string, string]; art: () => ReactElement };
 
 // All scenes draw in a 200×130 viewBox, cropped with "slice" to any shape.
-const SCENES: Record<TradeId, Scene[]> = {
+const SCENES: Record<CategoryId, Scene[]> = {
   framing: [
     {
       // Stud wall: plates + studs + a corner brace.
@@ -68,7 +69,7 @@ const SCENES: Record<TradeId, Scene[]> = {
       ),
     },
   ],
-  roofing: [
+  roof_framing: [
     {
       // Shingle slope: staggered courses on a roof plane.
       gradient: ["#8CA0B6", "#67809B"],
@@ -113,7 +114,7 @@ const SCENES: Record<TradeId, Scene[]> = {
       ),
     },
   ],
-  backframe: [
+  backframing: [
     {
       // Bulkhead: ceiling drop boxed around a duct.
       gradient: ["#A79BB2", "#82738F"],
@@ -161,7 +162,7 @@ const SCENES: Record<TradeId, Scene[]> = {
       ),
     },
   ],
-  general_labor: [
+  general_labour: [
     {
       // Hard hat.
       gradient: ["#9BB098", "#748D72"],
@@ -216,19 +217,19 @@ function hashSeed(seed: string): number {
 }
 
 export function TradeArt({
-  trade,
+  category,
   seed = "",
   variant,
   style,
   children,
 }: {
-  trade: TradeId;
+  category: CategoryId;
   seed?: string;
   variant?: number;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
 }) {
-  const scenes = SCENES[trade];
+  const scenes = SCENES[category];
   const scene = scenes[(variant ?? hashSeed(seed)) % scenes.length];
   return (
     <LinearGradient colors={scene.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={style}>

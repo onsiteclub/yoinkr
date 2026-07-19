@@ -1,12 +1,19 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "@/components/Avatar";
 import { PressableScale } from "@/components/PressableScale";
 import { TrustInline } from "@/components/TrustInline";
 import { Verified } from "@/components/Verified";
-import { getApplications, getListing, getOrCreateConversation } from "@/data/repository";
+import { categoryLabels } from "@/data/categories";
+import {
+  acceptApplication,
+  declineApplication,
+  getApplications,
+  getListing,
+  getOrCreateConversation,
+} from "@/data/repository";
 import type { Application, Listing } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
@@ -14,18 +21,47 @@ import { fonts } from "@/theme/fonts";
 
 // Applicants on one of MY job posts — each application shows the worker's
 // trust signals up front (stars, deals closed, references via profile).
+// Accepting is the moment the deal is born (agreed → done → both rate).
 export default function ApplicantsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { isMobile, contentWidth } = useResponsive();
   const [listing, setListing] = useState<Listing | undefined>();
   const [applications, setApplications] = useState<Application[]>([]);
+  const [busy, setBusy] = useState<string | null>(null); // application id in flight
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!id) return;
     getListing(id).then(setListing);
     getApplications(id).then(setApplications);
   }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const accept = async (a: Application) => {
+    setBusy(a.id);
+    try {
+      await acceptApplication(a);
+      // Straight into the conversation — the deal banner lives there.
+      const convId = await getOrCreateConversation(a.applicantId, a.listingId);
+      router.push({ pathname: "/chat/[id]", params: { id: convId } });
+      load();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const decline = async (a: Application) => {
+    setBusy(a.id);
+    try {
+      await declineApplication(a.id);
+      load();
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -73,7 +109,7 @@ export default function ApplicantsScreen() {
                     {a.applicant.verified && <Verified />}
                   </View>
                   <Text style={styles.tradeLine}>
-                    {a.applicant.trade} · {a.applicant.yearsExp} yrs
+                    {categoryLabels(a.applicant.categories) || "—"} · {a.applicant.yearsExp} yrs
                   </Text>
                   <TrustInline trust={a.applicant.trustScore} dealsClosed={a.applicant.dealsClosed} />
                 </View>
@@ -85,24 +121,59 @@ export default function ApplicantsScreen() {
 
               <Text style={styles.message}>“{a.message}”</Text>
 
-              <View style={styles.actions}>
-                <PressableScale
-                  style={styles.secondaryBtn}
-                  onPress={() => router.push({ pathname: "/worker/[id]", params: { id: a.applicantId } })}
-                >
-                  <Text style={styles.secondaryText}>View profile</Text>
-                </PressableScale>
-                <PressableScale
-                  style={styles.primaryBtn}
-                  onPress={() =>
-                    getOrCreateConversation(a.applicantId, listing?.id ?? null).then((convId) =>
-                      router.push({ pathname: "/chat/[id]", params: { id: convId } })
-                    )
-                  }
-                >
-                  <Text style={styles.primaryText}>Message</Text>
-                </PressableScale>
-              </View>
+              {a.status === "pending" ? (
+                <View style={styles.actions}>
+                  <PressableScale
+                    style={styles.secondaryBtn}
+                    disabled={busy === a.id}
+                    onPress={() => decline(a)}
+                  >
+                    <Text style={styles.secondaryText}>Decline</Text>
+                  </PressableScale>
+                  <PressableScale
+                    style={styles.secondaryBtn}
+                    onPress={() =>
+                      getOrCreateConversation(a.applicantId, listing?.id ?? null).then((convId) =>
+                        router.push({ pathname: "/chat/[id]", params: { id: convId } })
+                      )
+                    }
+                  >
+                    <Text style={styles.secondaryText}>Message</Text>
+                  </PressableScale>
+                  <PressableScale
+                    style={styles.primaryBtn}
+                    disabled={busy === a.id}
+                    onPress={() => accept(a)}
+                  >
+                    <Text style={styles.primaryText}>{busy === a.id ? "…" : "Accept"}</Text>
+                  </PressableScale>
+                </View>
+              ) : (
+                <View style={styles.actions}>
+                  <View style={[styles.statusPill, a.status === "accepted" ? styles.statusAccepted : styles.statusDeclined]}>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        { color: a.status === "accepted" ? colors.good : colors.inkLo },
+                      ]}
+                    >
+                      {a.status === "accepted" ? "✓ Accepted — deal on" : "Declined"}
+                    </Text>
+                  </View>
+                  {a.status === "accepted" && (
+                    <PressableScale
+                      style={styles.primaryBtn}
+                      onPress={() =>
+                        getOrCreateConversation(a.applicantId, listing?.id ?? null).then((convId) =>
+                          router.push({ pathname: "/chat/[id]", params: { id: convId } })
+                        )
+                      }
+                    >
+                      <Text style={styles.primaryText}>Open chat</Text>
+                    </PressableScale>
+                  )}
+                </View>
+              )}
             </View>
           ))
         )}
@@ -186,4 +257,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { fontSize: 12.5, fontFamily: fonts.display, color: colors.white },
+  statusPill: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  statusAccepted: { backgroundColor: colors.goodBg, borderColor: colors.goodLine },
+  statusDeclined: { backgroundColor: colors.bg, borderColor: colors.line },
+  statusText: { fontSize: 12.5, fontWeight: "800" },
 });
