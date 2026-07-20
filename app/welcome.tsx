@@ -13,14 +13,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { LogoMark } from "@/components/Logo";
 import { PressableScale } from "@/components/PressableScale";
+import { requestPasswordReset, signInWithEmail, upgradeToAccount } from "@/data/supabase";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
 
 // Landing + login (Facebook-style: brand hero + sign-in card; split panes on
-// desktop, single column on mobile). AUTH IS NOT WIRED YET — the app runs on
-// an anonymous Supabase session, so every path currently enters the app;
-// "Log in" / social buttons become real when email/Apple/Google upgrade lands.
+// desktop, single column on mobile). One Onsite account works across the
+// whole holding: "Log in" is supabase.auth against onsite-core; "Create
+// account" upgrades the anonymous session in place (same user id — guest
+// posts and history survive). Apple/Google wait on provider config.
 // Form follows login-UX basics: two fields only, correct keyboard/autofill
 // hints, show-password toggle, inline errors, no confirm-password.
 
@@ -30,31 +32,69 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const { isDesktop } = useResponsive();
 
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
 
   const enter = () => router.replace("/(tabs)");
 
-  const logIn = () => {
+  const validate = (): boolean => {
     if (!EMAIL_RE.test(email.trim())) {
       setError("Enter a valid email address.");
-      return;
+      return false;
     }
-    if (!password) {
-      setError("Enter your password.");
+    if (password.length < 6) {
+      setError(mode === "login" ? "Enter your password." : "Password needs at least 6 characters.");
+      return false;
+    }
+    setError(null);
+    return true;
+  };
+
+  const submit = async () => {
+    if (!validate() || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      if (mode === "login") {
+        await signInWithEmail(email.trim(), password);
+        enter();
+      } else {
+        await upgradeToAccount(email.trim(), password);
+        setNotice("Account created — confirm the link we emailed you. You're in meanwhile.");
+        enter();
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        /invalid login credentials/i.test(msg)
+          ? "Wrong email or password."
+          : /already.*registered|already.*exists/i.test(msg)
+            ? "This email already has an account — log in instead."
+            : msg
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const forgotPassword = async () => {
+    if (!EMAIL_RE.test(email.trim())) {
+      setError("Type your email above first, then tap this.");
       return;
     }
     setError(null);
-    // TODO(auth): sign in with Supabase email auth, upgrading the anon session.
-    enter();
+    await requestPasswordReset(email.trim());
+    setNotice("Password reset link sent — check your inbox.");
   };
 
   const comingSoon = () =>
-    setNotice("Accounts are coming soon — jump in as a guest meanwhile.");
+    setNotice("Apple and Google sign-in are coming soon — use email meanwhile.");
 
   const hero = (
     <View style={[styles.hero, isDesktop && styles.heroDesktop]}>
@@ -77,7 +117,12 @@ export default function WelcomeScreen() {
 
   const card = (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>Log in</Text>
+      <Text style={styles.cardTitle}>{mode === "login" ? "Log in" : "Create account"}</Text>
+      {mode === "signup" && (
+        <Text style={styles.modeHint}>
+          One account for every Onsite app. Anything you posted as a guest stays with you.
+        </Text>
+      )}
 
       <TextInput
         style={styles.input}
@@ -110,10 +155,10 @@ export default function WelcomeScreen() {
           }}
           secureTextEntry={!showPassword}
           autoCapitalize="none"
-          autoComplete="current-password"
-          textContentType="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
+          textContentType={mode === "login" ? "password" : "newPassword"}
           returnKeyType="go"
-          onSubmitEditing={logIn}
+          onSubmitEditing={submit}
         />
         <PressableScale
           onPress={() => setShowPassword((s) => !s)}
@@ -128,13 +173,22 @@ export default function WelcomeScreen() {
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      <PressableScale onPress={logIn} style={styles.cta} accessibilityRole="button">
-        <Text style={styles.ctaText}>Log in</Text>
+      <PressableScale
+        onPress={submit}
+        style={[styles.cta, busy && { opacity: 0.6 }]}
+        disabled={busy}
+        accessibilityRole="button"
+      >
+        <Text style={styles.ctaText}>
+          {busy ? "…" : mode === "login" ? "Log in" : "Create account"}
+        </Text>
       </PressableScale>
 
-      <PressableScale onPress={comingSoon} hitSlop={8} style={styles.forgot}>
-        <Text style={styles.linkText}>Forgot password?</Text>
-      </PressableScale>
+      {mode === "login" && (
+        <PressableScale onPress={forgotPassword} hitSlop={8} style={styles.forgot}>
+          <Text style={styles.linkText}>Forgot password?</Text>
+        </PressableScale>
+      )}
 
       <View style={styles.dividerRow}>
         <View style={styles.dividerLine} />
@@ -158,9 +212,20 @@ export default function WelcomeScreen() {
       {notice && <Text style={styles.notice}>{notice}</Text>}
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>New to yoinkr? </Text>
-        <PressableScale onPress={enter} hitSlop={8}>
-          <Text style={[styles.linkText, { fontFamily: fonts.bodyBold }]}>Create account</Text>
+        <Text style={styles.footerText}>
+          {mode === "login" ? "New to yoinkr? " : "Already have an account? "}
+        </Text>
+        <PressableScale
+          onPress={() => {
+            setMode((m) => (m === "login" ? "signup" : "login"));
+            setError(null);
+            setNotice(null);
+          }}
+          hitSlop={8}
+        >
+          <Text style={[styles.linkText, { fontFamily: fonts.bodyBold }]}>
+            {mode === "login" ? "Create account" : "Log in"}
+          </Text>
         </PressableScale>
       </View>
     </View>
@@ -299,6 +364,14 @@ const styles = StyleSheet.create({
     fontSize: 19,
     color: colors.inkBrand,
     marginBottom: 14,
+  },
+  modeHint: {
+    fontFamily: fonts.body,
+    fontSize: 12.5,
+    color: colors.secondary,
+    lineHeight: 17,
+    marginTop: -8,
+    marginBottom: 12,
   },
   input: {
     backgroundColor: colors.surface,

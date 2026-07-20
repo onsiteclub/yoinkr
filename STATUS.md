@@ -35,7 +35,7 @@ Tudo tipado e `tsc --noEmit` limpo. Anon-auth, chat Realtime, fotos e navegaçã
 
 ## Aberto (decisões/trabalho futuro)
 
-- **Auth real no `welcome`** (login/signup com a conta Onsite) — continua a pendência nº 1 do app; anon-first funciona e o upgrade preserva o `user.id`.
+- ~~Auth real no `welcome`~~ **FEITO (2026-07-20):** login e-mail/senha + criar conta como upgrade da sessão anônima (`updateUser`, mesmo `user.id` — dados de guest sobrevivem) + forgot password. Testado vivo contra o onsite-core: login responde, upgrade retorna 200 com `email_change_sent_at` (SMTP envia). Restam dois poréns de projeto (não do app): o SMTP padrão do plano Free tem rate limit baixíssimo — **configurar SMTP próprio antes do lançamento**; e o `site_url` do onsite-core é `http://localhost:3000`, então o link de confirmação confirma a conta mas aterrissa em página morta (config compartilhada da holding — decidir o redirect certo). Apple/Google seguem desligados no projeto; botões ficam "coming soon".
 - Deal só nasce de application em **job**; contratar a partir de um anúncio de worker (`available`) ainda não gera deal — o hirer precisa postar o job. Aceitável no MVP, revisar depois.
 - Egress de fotos (plano de thumbnails + paginação do feed) — plano de 2026-07-09 segue válido, não implementado.
 - Eventos `analytics.events` (source `yoinkr`) — lista de 2026-07-09 segue válida, não instrumentada.

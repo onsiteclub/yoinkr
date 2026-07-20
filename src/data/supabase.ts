@@ -24,10 +24,17 @@ export const supabase = createClient(url, anonKey, {
   },
 });
 
-// v1 auth: anonymous session on first use, upgradeable to email/Apple/Google
-// later (supabase.auth.updateUser / linkIdentity keeps the same user id, so
-// profile, listings and trust history survive the upgrade).
+// v1 auth: anonymous session on first use, upgradeable to a real Onsite
+// account (updateUser keeps the same user id, so profile, listings and trust
+// history survive the upgrade). Email/password is wired on the welcome
+// screen; Apple/Google wait for provider config on onsite-core.
 let sessionPromise: Promise<string> | null = null;
+
+// Login/logout/upgrade must invalidate the cached session — otherwise the
+// app keeps acting as the pre-login (anonymous) user id.
+supabase.auth.onAuthStateChange(() => {
+  sessionPromise = null;
+});
 
 export function ensureUserId(): Promise<string> {
   if (!sessionPromise) {
@@ -57,4 +64,27 @@ export function ensureUserId(): Promise<string> {
 export async function currentUserId(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.user.id ?? null;
+}
+
+// ---- real accounts (one Onsite account across the whole holding) ----
+
+// Existing account, any Onsite app. Replaces whatever session was active.
+export async function signInWithEmail(email: string, password: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+
+// Create account = attach email+password to the CURRENT (anonymous) session.
+// Same user id before and after, so everything posted as a guest is kept.
+// onsite-core requires email confirmation — the session stays usable
+// meanwhile; the emailed link is what makes login work from other devices.
+export async function upgradeToAccount(email: string, password: string): Promise<void> {
+  await ensureUserId(); // make sure the anon session that owns the data exists
+  const { error } = await supabase.auth.updateUser({ email, password });
+  if (error) throw error;
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error) throw error;
 }
