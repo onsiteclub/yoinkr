@@ -27,6 +27,16 @@ export function categoryLabels(ids: CategoryId[]): string {
   return ids.map(categoryLabel).filter(Boolean).join(" · ");
 }
 
+// Identity line for a profile: what they do, and/or that they hire.
+// A pure hirer has no categories — the label says what they are instead.
+export function roleLabel(ids: CategoryId[], hires: boolean): string {
+  const cats = categoryLabels(ids);
+  if (cats && hires) return `${cats} · hires`;
+  if (cats) return cats;
+  if (hires) return "Hirer / Contractor";
+  return "";
+}
+
 // ---- structured pay ----
 
 export type PayModel = "hourly" | "per_sqft" | "fixed";

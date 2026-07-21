@@ -8,7 +8,7 @@ import { Header } from "@/components/Header";
 import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
 import { Verified } from "@/components/Verified";
-import { categoryLabel, categoryLabels } from "@/data/categories";
+import { categoryLabel, roleLabel } from "@/data/categories";
 import { addPortfolioPhoto } from "@/data/photos";
 import { getMyProfile, getPortfolio, setAvailability } from "@/data/repository";
 import { hasAccount } from "@/data/supabase";
@@ -90,8 +90,8 @@ export default function ProfileScreen() {
               {me.verified && <Verified />}
             </View>
             <Text style={styles.trade}>
-              {categoryLabels(me.categories) || "Set up your categories"}
-              {me.crewSize === 2 ? " · duo" : ""}
+              {roleLabel(me.categories, me.hires) || "Set up your profile"}
+              {me.crewSize === 2 && me.categories.length > 0 ? " · duo" : ""}
             </Text>
             <Text style={styles.region}>📍 {me.region}</Text>
           </View>

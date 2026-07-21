@@ -11,7 +11,8 @@ export type ListingType = "job" | "tool" | "available";
 export interface Profile {
   id: string;
   fullName: string;
-  categories: CategoryId[]; // what they do — profile checkboxes, many allowed
+  categories: CategoryId[]; // what they do — empty for hirer-only profiles
+  hires: boolean; // posts jobs / takes crews — true for contractors
   yearsExp: number;
   region: string; // "Ottawa, ON"
   available: boolean;

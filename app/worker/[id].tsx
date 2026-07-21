@@ -11,7 +11,7 @@ import {
   CATEGORIES,
   type CategoryId,
   categoryLabel,
-  categoryLabels,
+  roleLabel,
 } from "@/data/categories";
 import {
   addVouch,
@@ -106,8 +106,9 @@ export default function WorkerProfileScreen() {
               {profile.verified && <Verified />}
             </View>
             <Text style={styles.trade}>
-              {categoryLabels(profile.categories) || "—"} · {profile.yearsExp} yrs
-              {profile.crewSize === 2 ? " · duo" : ""}
+              {roleLabel(profile.categories, profile.hires) || "—"}
+              {profile.categories.length > 0 ? ` · ${profile.yearsExp} yrs` : ""}
+              {profile.crewSize === 2 && profile.categories.length > 0 ? " · duo" : ""}
             </Text>
             <Text style={styles.region}>📍 {profile.region}</Text>
           </View>

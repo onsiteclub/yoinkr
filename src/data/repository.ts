@@ -76,6 +76,7 @@ function mapProfile(row: any, stats: ProfileStats): Profile {
     id: row.id,
     fullName: row.full_name,
     categories: (row.categories ?? []) as CategoryId[],
+    hires: !!row.hires,
     yearsExp: row.years_exp ?? 0,
     region: row.region ?? "Ottawa, ON",
     available: !!row.available,
@@ -153,6 +154,7 @@ export async function getMyProfile(): Promise<Profile> {
 export async function updateMyProfile(input: {
   fullName: string;
   categories: CategoryId[];
+  hires: boolean;
   yearsExp: number;
   acceptsHourly: boolean;
   acceptsPiecework: boolean;
@@ -164,6 +166,7 @@ export async function updateMyProfile(input: {
     .update({
       full_name: input.fullName,
       categories: input.categories,
+      hires: input.hires,
       years_exp: input.yearsExp,
       accepts_hourly: input.acceptsHourly,
       accepts_piecework: input.acceptsPiecework,
@@ -177,9 +180,10 @@ export async function updateMyProfile(input: {
   return mapProfile(data, stats[uid] ?? NO_STATS);
 }
 
-// Default profiles (fresh anonymous users) still carry the DB default name.
+// Complete = named, plus a role: worker profiles carry categories; a pure
+// hirer completes with the name alone (hires = true).
 export function isProfileIncomplete(p: Profile): boolean {
-  return p.fullName === "New worker" || p.categories.length === 0;
+  return p.fullName === "New worker" || (p.categories.length === 0 && !p.hires);
 }
 
 export async function setAvailability(available: boolean): Promise<Profile> {
