@@ -197,6 +197,15 @@ export default function ChatThreadScreen() {
           ]}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
+          {/* Safety + transparency notice (PIPEDA: say clearly that chats are
+              stored and may be reviewed; Tinder/Marketplace pattern). */}
+          <View style={styles.safetyNote}>
+            <Text style={styles.safetyText}>
+              🔒 Chats are stored and may be reviewed by automated safety systems to keep
+              yoinkr safe. Keep pay and job details in the app — never share banking info,
+              SIN or passwords.
+            </Text>
+          </View>
           {messages.map((m) => (
             <View key={m.id} style={[styles.bubbleWrap, { alignSelf: m.me ? "flex-end" : "flex-start" }]}>
               <View
@@ -437,6 +446,18 @@ const styles = StyleSheet.create({
   },
   modalBtnText: { color: colors.white, fontFamily: fonts.display, fontSize: 14 },
   thread: { padding: 14, gap: 8 },
+  safetyNote: {
+    alignSelf: "center",
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    maxWidth: "92%",
+    marginBottom: 4,
+  },
+  safetyText: { fontSize: 10.5, color: colors.inkLo, textAlign: "center", lineHeight: 15 },
   bubbleWrap: { maxWidth: "78%" },
   bubble: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 13 },
   bubbleMe: { backgroundColor: colors.accentTint, borderBottomRightRadius: 3 },
