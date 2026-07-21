@@ -33,6 +33,10 @@ Tudo tipado e `tsc --noEmit` limpo. Anon-auth, chat Realtime, fotos e navegaçã
 2. **Reseedar:** `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/seed_yoinkr.mjs` (seed novo já no shape do pivô, com vouches e 3+ ratings).
 3. Smoke test em dois devices: post job → yoink → accept → chat → mark done → rate dos dois lados → conferir reveal + média.
 
+## Moderação de chat (FEITO 2026-07-21, testado e2e)
+
+Pipeline assíncrono: INSERT em `yoinkr.messages` → trigger pg_net → Edge Function `moderate-message` → Claude Haiku classifica (`phone_share`, `sensitive_info`, `harassment`, `sexual`, `scam`, `csam`) → grava em `yoinkr.message_flags` (sem leitura pelo client; founder revisa no dashboard, `severity high` primeiro). **Telefone é flag + nudge no app, nunca bloqueio** (decisão de negócio: framing é ofício de telefone; o ativo é reputação, não comissão). CSAM em flag high = dever legal de reporte ao Cybertip.ca (lei federal de reporte obrigatório). Chave Anthropic vive como secret do projeto. Aviso de transparência no topo de toda conversa (PIPEDA). Falta: página formal de Privacy Policy + Terms antes de abrir além dos testers.
+
 ## Aberto (decisões/trabalho futuro)
 
 - ~~Auth real no `welcome`~~ **FEITO e REFEITO para a fase de testers (2026-07-20):** o modelo agora é **ver sem cadastro, interagir com conta**. Não existe mais sessão anônima automática — navegar (feed, vagas, perfis, referências, indicações) é sessionless via anon key; qualquer interação (post, yoink, mensagem, vouch, avaliação, perfil) passa por `requireAccount()` e manda o guest para o `welcome?gate=1`, que abre direto no signup. **`mailer_autoconfirm` foi LIGADO no onsite-core** (via management API) para cadastro instantâneo sem e-mail — decisão da fase de teste, afeta o projeto compartilhado; reavaliar antes do lançamento (religar confirmação + SMTP próprio). Migration `20260720120000` deu `grant select` de `applications` ao role `anon` (RLS continua escondendo as linhas; só destrava o embed do feed). Testado vivo: signup retorna sessão na hora, browse guest 200 em todos os caminhos, escrita de guest 401. Apple/Google seguem desligados; botões "coming soon".

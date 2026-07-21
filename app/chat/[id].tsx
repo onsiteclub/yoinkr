@@ -44,6 +44,9 @@ export default function ChatThreadScreen() {
   const [iRated, setIRated] = useState(false);
   const [ratingOpen, setRatingOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  // Phone numbers are allowed (framing is a phone trade) — sending one just
+  // triggers a one-time nudge to close the deal in-app. Flag, never block.
+  const [phoneNudge, setPhoneNudge] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -114,6 +117,7 @@ export default function ChatThreadScreen() {
     const text = draft.trim();
     if (!text || !chat) return;
     setDraft("");
+    if (/(\+?\d[\d\s\-().]{6,}\d)/.test(text)) setPhoneNudge(true);
     const msg = await sendMessage(chat.conversationId, text);
     setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
@@ -233,6 +237,15 @@ export default function ChatThreadScreen() {
             </Text>
           </View>
         </ScrollView>
+
+        {phoneNudge && (
+          <PressableScale style={styles.phoneNudge} onPress={() => setPhoneNudge(false)}>
+            <Text style={styles.phoneNudgeText}>
+              📞 Going to the phone? No problem — just come back and close the deal here.
+              That's how you both earn stars and stay covered if payment goes wrong. ✕
+            </Text>
+          </PressableScale>
+        )}
 
         {/* input */}
         <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
@@ -458,6 +471,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   safetyText: { fontSize: 10.5, color: colors.inkLo, textAlign: "center", lineHeight: 15 },
+  phoneNudge: {
+    backgroundColor: colors.safetyBg,
+    borderTopWidth: 1,
+    borderTopColor: "#F0D68A",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  phoneNudgeText: { fontSize: 11.5, color: colors.safetyInk, lineHeight: 16 },
   bubbleWrap: { maxWidth: "78%" },
   bubble: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 13 },
   bubbleMe: { backgroundColor: colors.accentTint, borderBottomRightRadius: 3 },
