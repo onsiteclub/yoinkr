@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { AccountGate } from "@/components/AccountGate";
 import { Avatar } from "@/components/Avatar";
 import { Header } from "@/components/Header";
 import { Placeholder } from "@/components/Placeholder";
@@ -10,6 +11,7 @@ import { Verified } from "@/components/Verified";
 import { categoryLabel, categoryLabels } from "@/data/categories";
 import { addPortfolioPhoto } from "@/data/photos";
 import { getMyProfile, getPortfolio, setAvailability } from "@/data/repository";
+import { hasAccount } from "@/data/supabase";
 import type { PortfolioPhoto, Profile } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
@@ -20,11 +22,16 @@ export default function ProfileScreen() {
   const [me, setMe] = useState<Profile | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      getMyProfile().then(setMe);
-      getPortfolio("me").then(setPortfolio);
+      hasAccount().then((ok) => {
+        setSignedIn(ok);
+        if (!ok) return;
+        getMyProfile().then(setMe);
+        getPortfolio("me").then(setPortfolio);
+      });
     }, [])
   );
 
@@ -47,6 +54,15 @@ export default function ProfileScreen() {
       setUploading(false);
     }
   };
+
+  if (signedIn === false) {
+    return (
+      <View style={styles.screen}>
+        <Header subtitle={<SectionTitle text="Profile" />} />
+        <AccountGate blurb="Your profile is your reputation — categories, portfolio, stars and vouches live on your account." />
+      </View>
+    );
+  }
 
   if (!me) {
     return (

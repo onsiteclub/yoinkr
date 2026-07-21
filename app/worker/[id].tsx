@@ -24,6 +24,7 @@ import {
   removeVouch,
 } from "@/data/repository";
 import { currentUserId } from "@/data/supabase";
+import { requireAccount } from "@/lib/gate";
 import type { PortfolioPhoto, Profile, Reference, Vouch } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
@@ -148,17 +149,21 @@ export default function WorkerProfileScreen() {
           <View style={styles.actionRow}>
             <PressableScale
               style={styles.messageBtn}
-              onPress={() =>
-                getOrCreateConversation(profile.id, null).then((convId) =>
-                  router.push({ pathname: "/chat/[id]", params: { id: convId } })
-                )
-              }
+              onPress={async () => {
+                if (!(await requireAccount())) return;
+                const convId = await getOrCreateConversation(profile.id, null);
+                router.push({ pathname: "/chat/[id]", params: { id: convId } });
+              }}
             >
               <Text style={styles.messageText}>Message {profile.fullName.split(" ")[0]}</Text>
             </PressableScale>
             <PressableScale
               style={[styles.vouchBtn, myVouch && styles.vouchBtnDone]}
-              onPress={() => (myVouch ? onUnvouch() : setVouchOpen(true))}
+              onPress={async () => {
+                if (!(await requireAccount())) return;
+                if (myVouch) onUnvouch();
+                else setVouchOpen(true);
+              }}
             >
               <Text style={[styles.vouchBtnText, myVouch && styles.vouchBtnTextDone]}>
                 {myVouch ? "Vouched ✓" : "Vouch"}

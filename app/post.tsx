@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +15,7 @@ import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
 import { pickAndUploadPhoto } from "@/data/photos";
 import { createListing } from "@/data/repository";
+import { hasAccount } from "@/data/supabase";
 import {
   CATEGORIES,
   type CategoryId,
@@ -51,6 +52,13 @@ export default function PostScreen() {
   const [saving, setSaving] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  // Posting is an interaction — guests get the welcome screen instead.
+  useEffect(() => {
+    hasAccount().then((ok) => {
+      if (!ok) router.replace({ pathname: "/welcome", params: { gate: "1" } });
+    });
+  }, []);
 
   const isTool = type === "tool";
   const effectiveModel: PayModel = isTool ? "fixed" : payModel;

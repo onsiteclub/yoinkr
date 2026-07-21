@@ -14,6 +14,7 @@ import { LogoMark } from "@/components/Logo";
 import { PressableScale } from "@/components/PressableScale";
 import { CATEGORIES, type CategoryId, allowsPiecework } from "@/data/categories";
 import { getMyProfile, updateMyProfile } from "@/data/repository";
+import { hasAccount } from "@/data/supabase";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
 
@@ -32,6 +33,10 @@ export default function SetupScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // Profile setup is account territory — guests get the welcome screen.
+    hasAccount().then((ok) => {
+      if (!ok) router.replace({ pathname: "/welcome", params: { gate: "1" } });
+    });
     getMyProfile()
       .then((p) => {
         if (p.fullName !== "New worker") setName(p.fullName);

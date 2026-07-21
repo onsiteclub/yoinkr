@@ -24,14 +24,16 @@ export const supabase = createClient(url, anonKey, {
   },
 });
 
-// v1 auth: anonymous session on first use, upgradeable to a real Onsite
-// account (updateUser keeps the same user id, so profile, listings and trust
-// history survive the upgrade). Email/password is wired on the welcome
-// screen; Apple/Google wait for provider config on onsite-core.
+// Tester-phase auth model (2026-07-20): browsing is sessionless — the feed,
+// listings, profiles, references and vouches are public reads under the anon
+// key. Interacting (post, yoink, message, vouch, rate) requires a real
+// Onsite account; there is NO automatic anonymous session anymore. UI entry
+// points gate with requireAccount() (src/lib/gate.ts); ensureUserId is the
+// data-layer backstop and throws when no one is signed in.
 let sessionPromise: Promise<string> | null = null;
 
-// Login/logout/upgrade must invalidate the cached session — otherwise the
-// app keeps acting as the pre-login (anonymous) user id.
+// Login/logout must invalidate the cached session — otherwise the app keeps
+// acting as the pre-login user id.
 supabase.auth.onAuthStateChange(() => {
   sessionPromise = null;
 });
@@ -40,13 +42,8 @@ export function ensureUserId(): Promise<string> {
   if (!sessionPromise) {
     sessionPromise = (async () => {
       const { data } = await supabase.auth.getSession();
-      let user = data.session?.user;
-      if (!user) {
-        const { data: anon, error } = await supabase.auth.signInAnonymously();
-        if (error) throw error;
-        user = anon.user ?? undefined;
-      }
-      if (!user) throw new Error("Could not establish a session");
+      const user = data.session?.user;
+      if (!user) throw new Error("Create a free account to do that — browsing needs none.");
       // Make sure the profile row exists (no-op when it already does).
       await supabase
         .from("profiles")
@@ -68,20 +65,34 @@ export async function currentUserId(): Promise<string | null> {
 
 // ---- real accounts (one Onsite account across the whole holding) ----
 
+// True when someone is signed in — the "may interact" check.
+export async function hasAccount(): Promise<boolean> {
+  return (await currentUserId()) != null;
+}
+
 // Existing account, any Onsite app. Replaces whatever session was active.
 export async function signInWithEmail(email: string, password: string): Promise<void> {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
 }
 
-// Create account = attach email+password to the CURRENT (anonymous) session.
-// Same user id before and after, so everything posted as a guest is kept.
-// onsite-core requires email confirmation — the session stays usable
-// meanwhile; the emailed link is what makes login work from other devices.
-export async function upgradeToAccount(email: string, password: string): Promise<void> {
-  await ensureUserId(); // make sure the anon session that owns the data exists
-  const { error } = await supabase.auth.updateUser({ email, password });
+// Autoconfirm is on for the tester phase, so signUp returns a live session
+// immediately — no email round-trip. The profile row is created here so the
+// person can interact right away.
+export async function signUpWithEmail(email: string, password: string): Promise<void> {
+  const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
+  if (!data.session || !data.user) {
+    // Only happens if email confirmation gets re-enabled on the project.
+    throw new Error("Account created — confirm the email we sent you, then log in.");
+  }
+  await supabase
+    .from("profiles")
+    .upsert({ id: data.user.id }, { onConflict: "id", ignoreDuplicates: true });
+}
+
+export async function signOut(): Promise<void> {
+  await supabase.auth.signOut();
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {

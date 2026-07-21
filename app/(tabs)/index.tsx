@@ -6,6 +6,7 @@ import { FeedCardWide } from "@/components/FeedCardWide";
 import { FeedFilterBar } from "@/components/FeedFilters";
 import { Header } from "@/components/Header";
 import { PressableScale } from "@/components/PressableScale";
+import { requireAccount } from "@/lib/gate";
 import { CARD_HORIZONTAL_MIN, useResponsive } from "@/lib/responsive";
 import { getListings, getOrCreateConversation, getWeekendJobCount } from "@/data/repository";
 import { REGIONS } from "@/data/regions";
@@ -40,7 +41,9 @@ export default function FeedScreen() {
   // Refetch when returning to the feed (e.g. after posting a new listing).
   useFocusEffect(useCallback(() => load(), [load]));
 
-  const onAction = useCallback((listing: Listing) => {
+  // Viewing is free; proposing/messaging needs an account (requireAccount
+  // routes guests to welcome and returns false).
+  const onAction = useCallback(async (listing: Listing) => {
     const isMine = listing.mine ?? false;
     if (isMine && listing.type === "available") {
       router.push("/post");
@@ -49,15 +52,16 @@ export default function FeedScreen() {
       router.push({ pathname: "/applicants/[id]", params: { id: listing.id } });
     } else if (listing.type === "job") {
       // Someone's job → send a proposal.
+      if (!(await requireAccount())) return;
       router.push({ pathname: "/apply/[id]", params: { id: listing.id } });
     } else if (listing.type === "available") {
       // Worker card → public profile (references first, then message from there).
       router.push({ pathname: "/worker/[id]", params: { id: listing.authorId } });
     } else {
       // Tool (or anything else) → open the conversation about this listing.
-      getOrCreateConversation(listing.authorId, listing.id).then((convId) =>
-        router.push({ pathname: "/chat/[id]", params: { id: convId } })
-      );
+      if (!(await requireAccount())) return;
+      const convId = await getOrCreateConversation(listing.authorId, listing.id);
+      router.push({ pathname: "/chat/[id]", params: { id: convId } });
     }
   }, []);
 

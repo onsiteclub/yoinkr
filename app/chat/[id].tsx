@@ -75,7 +75,10 @@ export default function ChatThreadScreen() {
         },
         uid
       );
-    })();
+    })().catch(() => {
+      // No session (guest deep link) — chat is account territory.
+      router.replace({ pathname: "/welcome", params: { gate: "1" } });
+    });
 
     return () => {
       cancelled = true;

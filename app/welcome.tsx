@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -13,16 +13,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { LogoMark } from "@/components/Logo";
 import { PressableScale } from "@/components/PressableScale";
-import { requestPasswordReset, signInWithEmail, upgradeToAccount } from "@/data/supabase";
+import { requestPasswordReset, signInWithEmail, signUpWithEmail } from "@/data/supabase";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
 
 // Landing + login (Facebook-style: brand hero + sign-in card; split panes on
-// desktop, single column on mobile). One Onsite account works across the
-// whole holding: "Log in" is supabase.auth against onsite-core; "Create
-// account" upgrades the anonymous session in place (same user id — guest
-// posts and history survive). Apple/Google wait on provider config.
+// desktop, single column on mobile). Tester-phase model: browsing is free
+// and sessionless; interacting requires an account. One Onsite account works
+// across the whole holding. Autoconfirm is on, so signup enters instantly.
+// Guests land here with ?gate=1 when they tap an interaction.
 // Form follows login-UX basics: two fields only, correct keyboard/autofill
 // hints, show-password toggle, inline errors, no confirm-password.
 
@@ -31,14 +31,18 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/;
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const { isDesktop } = useResponsive();
+  const { gate } = useLocalSearchParams<{ gate?: string }>();
 
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  // Arriving via an interaction gate → lead with signup and say why.
+  const [mode, setMode] = useState<"login" | "signup">(gate ? "signup" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(
+    gate ? "Browsing is free — posting, yoinking and messaging need a free account." : null
+  );
   const passwordRef = useRef<TextInput>(null);
 
   const enter = () => router.replace("/(tabs)");
@@ -63,12 +67,10 @@ export default function WelcomeScreen() {
     try {
       if (mode === "login") {
         await signInWithEmail(email.trim(), password);
-        enter();
       } else {
-        await upgradeToAccount(email.trim(), password);
-        setNotice("Account created — confirm the link we emailed you. You're in meanwhile.");
-        enter();
+        await signUpWithEmail(email.trim(), password);
       }
+      enter();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(
@@ -120,7 +122,7 @@ export default function WelcomeScreen() {
       <Text style={styles.cardTitle}>{mode === "login" ? "Log in" : "Create account"}</Text>
       {mode === "signup" && (
         <Text style={styles.modeHint}>
-          One account for every Onsite app. Anything you posted as a guest stays with you.
+          Free, instant, one account for every Onsite app.
         </Text>
       )}
 

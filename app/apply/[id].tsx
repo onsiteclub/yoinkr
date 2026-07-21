@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "@/components/PressableScale";
 import { TrustInline } from "@/components/TrustInline";
 import { applyToListing, getListing } from "@/data/repository";
+import { hasAccount } from "@/data/supabase";
 import type { Listing } from "@/data/types";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
@@ -28,6 +29,10 @@ export default function ApplyScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // Backstop gate (the feed already gates before navigating here).
+    hasAccount().then((ok) => {
+      if (!ok) router.replace({ pathname: "/welcome", params: { gate: "1" } });
+    });
     if (id) getListing(id).then(setListing);
   }, [id]);
 

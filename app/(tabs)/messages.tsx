@@ -1,10 +1,12 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { AccountGate } from "@/components/AccountGate";
 import { Avatar } from "@/components/Avatar";
 import { Header } from "@/components/Header";
 import { PressableScale } from "@/components/PressableScale";
 import { getChats } from "@/data/repository";
+import { hasAccount } from "@/data/supabase";
 import type { ChatSummary } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
@@ -14,14 +16,28 @@ export default function MessagesScreen() {
   const { isMobile, contentWidth } = useResponsive();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      getChats()
-        .then(setChats)
-        .finally(() => setLoaded(true));
+      hasAccount().then((ok) => {
+        setSignedIn(ok);
+        if (!ok) return;
+        getChats()
+          .then(setChats)
+          .finally(() => setLoaded(true));
+      });
     }, [])
   );
+
+  if (signedIn === false) {
+    return (
+      <View style={styles.screen}>
+        <Header subtitle={<Text style={styles.sectionTitle}>Messages</Text>} />
+        <AccountGate blurb="Chat with hirers and workers about real jobs — conversations live on your account." />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
