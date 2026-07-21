@@ -9,6 +9,7 @@ export const CATEGORIES = [
   { id: "framing", label: "Framer", piecework: true },
   { id: "roof_framing", label: "Roof framer", piecework: true },
   { id: "backframing", label: "Backframer", piecework: true },
+  { id: "strapping", label: "Strapping", piecework: true },
   { id: "general_labour", label: "General labour", piecework: false },
 ] as const;
 

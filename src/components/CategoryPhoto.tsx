@@ -11,10 +11,8 @@ import { fonts } from "@/theme/fonts";
 const PHOTOS: Record<CategoryId, number[]> = {
   framing: [require("../../assets/categories/framing.jpg")],
   roof_framing: [require("../../assets/categories/roof-framing.jpg")],
-  backframing: [
-    require("../../assets/categories/backframing-1.jpg"),
-    require("../../assets/categories/backframing-2.jpg"),
-  ],
+  backframing: [require("../../assets/categories/backframing-1.jpg")],
+  strapping: [require("../../assets/categories/strapping.jpg")],
   general_labour: [require("../../assets/categories/general-labour.jpg")],
 };
 
