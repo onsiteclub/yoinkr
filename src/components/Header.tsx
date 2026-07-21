@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useResponsive } from "@/lib/responsive";
+import { useSignedIn } from "@/lib/useSignedIn";
 import { useRegion } from "@/store/useRegion";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
@@ -12,6 +13,8 @@ import { PressableScale } from "./PressableScale";
 // - mobile: lockup + Ottawa chip + search icon, subtitle below (current design).
 // - tablet: brand lives in the nav rail → context line + Ottawa chip + search input.
 // - desktop: brand + Ottawa live in the sidebar → context line + search input only.
+// Guests get a persistent "Sign in" pill (Kijiji/Marketplace pattern:
+// browse-first, the header carries the account entry point).
 export function Header({
   subtitle,
   showSearch = true,
@@ -22,6 +25,13 @@ export function Header({
   const insets = useSafeAreaInsets();
   const { isMobile, isTablet, contentWidth } = useResponsive();
   const city = useRegion((s) => s.city);
+  const signedIn = useSignedIn();
+
+  const signInPill = signedIn === false && (
+    <PressableScale style={styles.signInPill} onPress={() => router.push("/welcome")}>
+      <Text style={styles.signInText}>Sign in</Text>
+    </PressableScale>
+  );
 
   if (isMobile) {
     return (
@@ -36,11 +46,14 @@ export function Header({
                 <Text style={styles.chipText}>{city} ▾</Text>
               </PressableScale>
             </View>
-            {showSearch && (
-              <View style={styles.searchIconBox}>
-                <Text style={styles.searchIcon}>⌕</Text>
-              </View>
-            )}
+            <View style={styles.rightRow}>
+              {signInPill}
+              {showSearch && (
+                <View style={styles.searchIconBox}>
+                  <Text style={styles.searchIcon}>⌕</Text>
+                </View>
+              )}
+            </View>
           </View>
           {subtitle ? <View style={styles.subtitle}>{subtitle}</View> : null}
         </View>
@@ -67,6 +80,7 @@ export function Header({
               placeholderTextColor={colors.tertiary}
             />
           )}
+          {signInPill}
         </View>
       </View>
     </View>
@@ -104,6 +118,15 @@ const styles = StyleSheet.create({
     color: colors.accentDark,
     letterSpacing: 0.3,
   },
+  rightRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  signInPill: {
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    minHeight: 34,
+    justifyContent: "center",
+  },
+  signInText: { color: colors.white, fontFamily: fonts.bodySemi, fontSize: 12.5 },
   searchIconBox: {
     width: 34,
     height: 34,
