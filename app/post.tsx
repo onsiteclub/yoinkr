@@ -27,11 +27,18 @@ import { useRegion } from "@/store/useRegion";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
 
+// Both sides post here: hirers put up jobs, workers put up themselves.
 const TYPES: { key: ListingType; label: string }[] = [
-  { key: "job", label: "Job" },
-  { key: "available", label: "Worker" },
+  { key: "job", label: "I'm hiring" },
+  { key: "available", label: "I want work" },
   { key: "tool", label: "Tool" },
 ];
+
+const TYPE_HINTS: Record<ListingType, string> = {
+  job: "You need hands — workers see your post and Yoink it.",
+  available: "You're offering your work — hirers see you in the feed and message you.",
+  tool: "Selling or renting a tool.",
+};
 
 // The category decides how pay works: any category can be hourly; $/sqft and
 // fixed price exist only for the skilled three (general labour is hourly-only,
@@ -128,8 +135,8 @@ export default function PostScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.form}>
-          {/* type selector */}
-          <Text style={styles.label}>Type</Text>
+          {/* type selector — hirer and worker are both first-class here */}
+          <Text style={styles.label}>What are you posting?</Text>
           <View style={styles.typeRow}>
             {TYPES.map((t) => {
               const active = type === t.key;
@@ -147,6 +154,7 @@ export default function PostScreen() {
               );
             })}
           </View>
+          <Text style={styles.hint}>{TYPE_HINTS[type]}</Text>
 
           {/* category selector (jobs & workers) */}
           {!isTool && (

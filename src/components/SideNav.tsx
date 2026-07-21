@@ -70,8 +70,9 @@ export function Sidebar() {
         <Text style={sideStyles.wordmark}>yoinkr</Text>
       </View>
 
+      {/* Both sides post: a job you're hiring for, or yourself for work. */}
       <PressableScale style={sideStyles.post} onPress={() => router.push("/post")}>
-        <Text style={sideStyles.postText}>＋ Post a job</Text>
+        <Text style={sideStyles.postText}>＋ Post — job or yourself</Text>
       </PressableScale>
 
       {/* Nav + contextual filters scroll together on short windows. */}
