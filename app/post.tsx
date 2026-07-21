@@ -270,16 +270,8 @@ export default function PostScreen() {
             )}
           </View>
 
-          {/* crew — piecework framers run solo or in twos */}
-          {!isTool && (
-            <View style={{ marginTop: 16 }}>
-              <Text style={styles.label}>{type === "job" ? "Crew needed" : "You work as"}</Text>
-              <View style={styles.typeRow}>
-                <PayChip label="Solo" active={crewSize === 1} onPress={() => setCrewSize(1)} />
-                <PayChip label={type === "job" ? "2-man" : "Duo"} active={crewSize === 2} onPress={() => setCrewSize(2)} />
-              </View>
-            </View>
-          )}
+          {/* No crew selector: job titles say it naturally ("2 framers — …")
+              and worker offers inherit solo/duo from the profile prefill. */}
 
           {/* region (Ottawa only for now) */}
           <View style={{ marginTop: 16 }}>
