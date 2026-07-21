@@ -14,39 +14,35 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
 import { pickAndUploadPhoto } from "@/data/photos";
-import { createListing } from "@/data/repository";
+import { createListing, getMyProfile } from "@/data/repository";
 import { hasAccount } from "@/data/supabase";
 import {
   CATEGORIES,
   type CategoryId,
   type PayModel,
   allowsPiecework,
+  categoryLabel,
 } from "@/data/categories";
 import type { ListingType } from "@/data/types";
 import { useRegion } from "@/store/useRegion";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
 
-// Both sides post here: hirers put up jobs, workers put up themselves.
-const TYPES: { key: ListingType; label: string }[] = [
-  { key: "job", label: "I'm hiring" },
-  { key: "available", label: "I want work" },
-  { key: "tool", label: "Tool" },
-];
-
-const TYPE_HINTS: Record<ListingType, string> = {
-  job: "You need hands — workers see your post and Yoink it.",
-  available: "You're offering your work — hirers see you in the feed and message you.",
-  tool: "Selling or renting a tool.",
+// Posting is a two-step modal: first "what are you posting?" (hiring vs
+// offering yourself are different registrations — founder decision
+// 2026-07-20), then a form shaped for that choice. The worker form arrives
+// pre-filled from the profile (categories, solo/duo, piecework preference).
+// Tools are the discreet third door.
+const FORM_TITLES: Record<ListingType, string> = {
+  job: "Post a job",
+  available: "Offer your work",
+  tool: "Sell a tool",
 };
 
-// The category decides how pay works: any category can be hourly; $/sqft and
-// fixed price exist only for the skilled three (general labour is hourly-only,
-// enforced here and by a DB check). Tools are just a fixed price.
 export default function PostScreen() {
   const insets = useSafeAreaInsets();
   const city = useRegion((s) => s.city);
-  const [type, setType] = useState<ListingType>("job");
+  const [type, setType] = useState<ListingType | null>(null); // null = chooser step
   const [category, setCategory] = useState<CategoryId>("framing");
   const [payModel, setPayModel] = useState<PayModel>("hourly");
   const [rate, setRate] = useState("");
@@ -71,6 +67,26 @@ export default function PostScreen() {
   const effectiveModel: PayModel = isTool ? "fixed" : payModel;
   const pieceworkOk = !isTool && allowsPiecework(category);
 
+  // Choosing "I want work" pre-fills the ad from the profile — the worker's
+  // registration already said what they do and how they work.
+  const chooseType = async (t: ListingType) => {
+    if (t === "available") {
+      try {
+        const me = await getMyProfile();
+        const mine = me.categories[0];
+        if (mine) {
+          setCategory(mine);
+          if (!allowsPiecework(mine)) setPayModel("hourly");
+        }
+        setCrewSize(me.crewSize);
+        if (!me.acceptsPiecework) setPayModel("hourly");
+      } catch {
+        // profile not loadable — form still works, just unfilled
+      }
+    }
+    setType(t);
+  };
+
   const pickCategory = (id: CategoryId) => {
     setCategory(id);
     if (!allowsPiecework(id)) setPayModel("hourly");
@@ -82,12 +98,20 @@ export default function PostScreen() {
   const rateOk = Number.isFinite(rateNum) && rateNum > 0;
   const sqftNum = parseInt(sqft, 10);
   const sqftOk = effectiveModel !== "per_sqft" || (Number.isFinite(sqftNum) && sqftNum > 0);
-  const canPost = titleOk && rateOk && sqftOk && !saving && !uploading;
+  const canPost = type !== null && titleOk && rateOk && sqftOk && !saving && !uploading;
 
   const rateLabel =
     effectiveModel === "hourly" ? "Rate ($/hr)" : effectiveModel === "per_sqft" ? "Rate ($/sqft)" : "Price ($)";
   const ratePlaceholder =
     effectiveModel === "hourly" ? "34" : effectiveModel === "per_sqft" ? "2.10" : "2400";
+  const titlePlaceholder =
+    type === "job"
+      ? "2 framers — starts Saturday 7am"
+      : type === "available"
+        ? `${categoryLabel(category)} — available this weekend`
+        : "Milwaukee M18 drill — full kit";
+  const detailPlaceholder =
+    type === "job" ? "weekend · starts 7am" : type === "available" ? "10 yrs · own tools" : "used, 2 batteries";
 
   const addPhoto = async () => {
     try {
@@ -102,7 +126,7 @@ export default function PostScreen() {
   };
 
   const submit = async () => {
-    if (!canPost) return;
+    if (!canPost || type === null) return;
     setSaving(true);
     await createListing({
       type,
@@ -115,19 +139,63 @@ export default function PostScreen() {
       detail: detail.trim(),
       city,
       location: location.trim() || "Ottawa area",
-      urgent,
+      urgent: type === "job" ? urgent : false,
       photoUrl,
     });
     router.back();
   };
 
+  // ---- step 1: what are you posting? ----
+  if (type === null) {
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <PressableScale onPress={() => router.back()} hitSlop={10}>
+            <Text style={styles.cancel}>Cancel</Text>
+          </PressableScale>
+          <Text style={styles.headerTitle}>New post</Text>
+          <View style={{ width: 44 }} />
+        </View>
+
+        <View style={styles.chooser}>
+          <PressableScale style={styles.chooseCard} onPress={() => chooseType("job")}>
+            <Text style={styles.chooseEmoji}>🏗️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.chooseTitle}>I'm hiring</Text>
+              <Text style={styles.chooseBody}>
+                Post a job — framers see it in the feed and Yoink it.
+              </Text>
+            </View>
+            <Text style={styles.chooseArrow}>›</Text>
+          </PressableScale>
+
+          <PressableScale style={styles.chooseCard} onPress={() => chooseType("available")}>
+            <Text style={styles.chooseEmoji}>👷</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.chooseTitle}>I want work</Text>
+              <Text style={styles.chooseBody}>
+                Offer yourself — starts from your profile, hirers message you.
+              </Text>
+            </View>
+            <Text style={styles.chooseArrow}>›</Text>
+          </PressableScale>
+
+          <PressableScale onPress={() => chooseType("tool")} hitSlop={8} style={styles.toolLink}>
+            <Text style={styles.toolLinkText}>Selling a tool? →</Text>
+          </PressableScale>
+        </View>
+      </View>
+    );
+  }
+
+  // ---- step 2: the form, shaped by the choice ----
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <PressableScale onPress={() => router.back()} hitSlop={10}>
-          <Text style={styles.cancel}>Cancel</Text>
+        <PressableScale onPress={() => setType(null)} hitSlop={10}>
+          <Text style={styles.back}>‹</Text>
         </PressableScale>
-        <Text style={styles.headerTitle}>New listing</Text>
+        <Text style={styles.headerTitle}>{FORM_TITLES[type]}</Text>
         <PressableScale onPress={submit} hitSlop={10} disabled={!canPost}>
           <Text style={[styles.post, { color: canPost ? colors.ink : colors.inkLo }]}>Post</Text>
         </PressableScale>
@@ -135,31 +203,10 @@ export default function PostScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.form}>
-          {/* type selector — hirer and worker are both first-class here */}
-          <Text style={styles.label}>What are you posting?</Text>
-          <View style={styles.typeRow}>
-            {TYPES.map((t) => {
-              const active = type === t.key;
-              return (
-                <PressableScale
-                  key={t.key}
-                  onPress={() => setType(t.key)}
-                  style={[
-                    styles.typeChip,
-                    { borderColor: active ? colors.ink : colors.line, backgroundColor: active ? colors.ink : colors.card },
-                  ]}
-                >
-                  <Text style={[styles.typeText, { color: active ? colors.white : colors.inkMid }]}>{t.label}</Text>
-                </PressableScale>
-              );
-            })}
-          </View>
-          <Text style={styles.hint}>{TYPE_HINTS[type]}</Text>
-
           {/* category selector (jobs & workers) */}
           {!isTool && (
-            <View style={{ marginTop: 16 }}>
-              <Text style={styles.label}>Category</Text>
+            <View>
+              <Text style={styles.label}>{type === "job" ? "What do you need?" : "What do you do?"}</Text>
               <View style={styles.tradeWrap}>
                 {CATEGORIES.map((c) => {
                   const active = category === c.id;
@@ -220,10 +267,10 @@ export default function PostScreen() {
           {/* crew — piecework framers run solo or in twos */}
           {!isTool && (
             <View style={{ marginTop: 16 }}>
-              <Text style={styles.label}>{type === "job" ? "Crew needed" : "Crew"}</Text>
+              <Text style={styles.label}>{type === "job" ? "Crew needed" : "You work as"}</Text>
               <View style={styles.typeRow}>
                 <PayChip label="Solo" active={crewSize === 1} onPress={() => setCrewSize(1)} />
-                <PayChip label="2-man" active={crewSize === 2} onPress={() => setCrewSize(2)} />
+                <PayChip label={type === "job" ? "2-man" : "Duo"} active={crewSize === 2} onPress={() => setCrewSize(2)} />
               </View>
             </View>
           )}
@@ -237,21 +284,23 @@ export default function PostScreen() {
             </View>
           </View>
 
-          <Field label="Title" value={title} onChangeText={setTitle} placeholder="2 framers — starts Saturday 7am" />
-          <Field label="Detail" value={detail} onChangeText={setDetail} placeholder="weekend · 1 day · used, 2 batteries" />
+          <Field label="Title" value={title} onChangeText={setTitle} placeholder={titlePlaceholder} />
+          <Field label="Detail" value={detail} onChangeText={setDetail} placeholder={detailPlaceholder} />
           <Field label="Location" value={location} onChangeText={setLocation} placeholder="Kanata" />
 
-          <View style={styles.urgentRow}>
-            <View>
-              <Text style={styles.label}>Urgent</Text>
-              <Text style={styles.urgentHint}>Starting today / this weekend</Text>
+          {type === "job" && (
+            <View style={styles.urgentRow}>
+              <View>
+                <Text style={styles.label}>Urgent</Text>
+                <Text style={styles.urgentHint}>Starting today / this weekend</Text>
+              </View>
+              <Switch
+                value={urgent}
+                onValueChange={setUrgent}
+                trackColor={{ true: colors.hazard, false: colors.line }}
+              />
             </View>
-            <Switch
-              value={urgent}
-              onValueChange={setUrgent}
-              trackColor={{ true: colors.hazard, false: colors.line }}
-            />
-          </View>
+          )}
 
           {/* photo */}
           <View style={{ marginTop: 16 }}>
@@ -282,7 +331,7 @@ export default function PostScreen() {
             disabled={!canPost}
             style={[styles.submitBtn, { opacity: canPost ? 1 : 0.5 }]}
           >
-            <Text style={styles.submitText}>Post listing</Text>
+            <Text style={styles.submitText}>{FORM_TITLES[type]}</Text>
           </PressableScale>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -329,6 +378,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   cancel: { fontSize: 14, color: colors.inkMid },
+  back: { fontSize: 28, color: colors.inkMid, lineHeight: 30, width: 18 },
   headerTitle: {
     fontFamily: fonts.display,
     fontSize: 15,
@@ -338,6 +388,23 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   post: { fontSize: 15, fontWeight: "800" },
+  chooser: { padding: 18, gap: 12, paddingTop: 26 },
+  chooseCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 16,
+    padding: 18,
+  },
+  chooseEmoji: { fontSize: 30 },
+  chooseTitle: { fontSize: 16.5, fontWeight: "800", color: colors.ink },
+  chooseBody: { fontSize: 12.5, color: colors.inkMid, lineHeight: 17, marginTop: 3 },
+  chooseArrow: { fontSize: 26, color: colors.inkLo },
+  toolLink: { alignSelf: "center", padding: 8, marginTop: 4 },
+  toolLinkText: { fontSize: 13, fontWeight: "700", color: colors.inkMid },
   form: { padding: 18, paddingBottom: 40 },
   label: { fontSize: 12, fontWeight: "700", color: colors.inkMid, textTransform: "uppercase", letterSpacing: 0.4 },
   hint: { fontSize: 11.5, color: colors.inkLo, marginTop: 6 },
@@ -347,7 +414,7 @@ const styles = StyleSheet.create({
   tradeWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   tradeChip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 16, borderWidth: 1 },
   tradeChipText: { fontSize: 12.5, fontWeight: "700" },
-  payRow: { flexDirection: "row", gap: 10 },
+  payRow: { flexDirection: "row", gap: 10, marginTop: 2 },
   regionPill: {
     marginTop: 8,
     flexDirection: "row",
