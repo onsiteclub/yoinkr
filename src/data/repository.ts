@@ -410,6 +410,44 @@ function mapDeal(row: any): Deal {
   };
 }
 
+// The other participant's pending yoink on this listing — feeds the in-chat
+// accept bar. RLS only returns applications to the listing's author or the
+// applicant; since the applicant here is the OTHER person, getting a row back
+// means I am the author and may accept.
+export async function getPendingApplicationFrom(
+  listingId: string,
+  applicantId: string
+): Promise<Application | undefined> {
+  const { data, error } = await supabase
+    .from("applications")
+    .select("*, applicant:profiles(full_name,categories,years_exp,verified)")
+    .eq("listing_id", listingId)
+    .eq("applicant_id", applicantId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return undefined;
+  const a: any = data;
+  return {
+    id: a.id,
+    listingId: a.listing_id,
+    applicantId: a.applicant_id,
+    message: a.message,
+    proposedRate: a.proposed_rate ?? "",
+    status: a.status,
+    when: timeAgo(a.created_at),
+    createdAt: a.created_at,
+    applicant: {
+      fullName: a.applicant?.full_name ?? "—",
+      categories: (a.applicant?.categories ?? []) as CategoryId[],
+      yearsExp: a.applicant?.years_exp ?? 0,
+      trustScore: null,
+      dealsClosed: 0,
+      verified: !!a.applicant?.verified,
+    },
+  };
+}
+
 // Accepting is what creates the deal: the job's author (hirer) takes the
 // applicant (worker). Idempotent — re-accepting returns the existing deal.
 export async function acceptApplication(application: Application): Promise<Deal> {

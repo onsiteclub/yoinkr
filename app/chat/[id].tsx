@@ -15,9 +15,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "@/components/Avatar";
 import { PressableScale } from "@/components/PressableScale";
 import {
+  acceptApplication,
   getChat,
   getDealWith,
   getMyRatingForDeal,
+  getPendingApplicationFrom,
   getThread,
   markDealDone,
   markRead,
@@ -27,7 +29,7 @@ import {
   subscribeToThread,
 } from "@/data/repository";
 import { ensureUserId } from "@/data/supabase";
-import type { ChatSummary, Deal, ThreadMessage } from "@/data/types";
+import type { Application, ChatSummary, Deal, ThreadMessage } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
@@ -41,6 +43,9 @@ export default function ChatThreadScreen() {
   const [draft, setDraft] = useState("");
   // The deal this conversation is about (accepted application on the listing).
   const [deal, setDeal] = useState<Deal | null>(null);
+  // Their pending yoink on my listing → in-chat accept bar (close the deal
+  // right where the talking happens, without going back to the Crew screen).
+  const [pendingApp, setPendingApp] = useState<Application | null>(null);
   const [iRated, setIRated] = useState(false);
   const [ratingOpen, setRatingOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -64,6 +69,9 @@ export default function ChatThreadScreen() {
         if (!cancelled && d) {
           setDeal(d);
           setIRated(await getMyRatingForDeal(d.id));
+        } else if (!cancelled) {
+          const app = await getPendingApplicationFrom(c.listingId, c.otherId);
+          if (!cancelled && app) setPendingApp(app);
         }
       }
       const thread = await getThread(c.conversationId);
@@ -88,6 +96,16 @@ export default function ChatThreadScreen() {
       unsubscribe?.();
     };
   }, [id]);
+
+  const onAcceptInChat = async () => {
+    if (!pendingApp || !chat) return;
+    const d = await acceptApplication(pendingApp);
+    setDeal(d);
+    setPendingApp(null);
+    // Tell the other side right here, in realtime.
+    const msg = await sendMessage(chat.conversationId, "✅ Accepted your yoink — deal on. Let's line up the details.");
+    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+  };
 
   const onMarkDone = async () => {
     if (!deal) return;
@@ -237,6 +255,20 @@ export default function ChatThreadScreen() {
             </Text>
           </View>
         </ScrollView>
+
+        {!deal && pendingApp && (
+          <View style={styles.acceptBar}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.acceptBarTitle}>🤝 Close the deal with {chat.name}?</Text>
+              <Text style={styles.acceptBarSub}>
+                {pendingApp.proposedRate ? `Their offer: ${pendingApp.proposedRate}` : "They yoinked this job"}
+              </Text>
+            </View>
+            <PressableScale style={styles.acceptBtn} onPress={onAcceptInChat}>
+              <Text style={styles.acceptBtnText}>Accept</Text>
+            </PressableScale>
+          </View>
+        )}
 
         {phoneNudge && (
           <PressableScale style={styles.phoneNudge} onPress={() => setPhoneNudge(false)}>
@@ -479,6 +511,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   phoneNudgeText: { fontSize: 11.5, color: colors.safetyInk, lineHeight: 16 },
+  acceptBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.goodBg,
+    borderTopWidth: 1,
+    borderTopColor: colors.goodLine,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  acceptBarTitle: { fontSize: 12.5, fontWeight: "800", color: "#0a6b41" },
+  acceptBarSub: { fontSize: 11, color: "#3c7a5a", marginTop: 1 },
+  acceptBtn: {
+    backgroundColor: colors.good,
+    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  acceptBtnText: { color: colors.white, fontSize: 13, fontWeight: "800" },
   bubbleWrap: { maxWidth: "78%" },
   bubble: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 13 },
   bubbleMe: { backgroundColor: colors.accentTint, borderBottomRightRadius: 3 },
