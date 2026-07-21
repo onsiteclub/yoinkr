@@ -116,6 +116,7 @@ function mapListing(row: any, myId: string | null, stats: Record<string, Profile
     pay: payLabel(row.pay_model ?? null, row.rate != null ? Number(row.rate) : null),
     title: row.title,
     detail,
+    description: row.description ?? "",
     city: row.city,
     location: row.location,
     distanceKm: row.distance_km != null ? Number(row.distance_km) : undefined,
@@ -305,6 +306,7 @@ export interface NewListing {
   crewSize: number;
   title: string;
   detail: string;
+  description: string;
   city: string;
   location: string;
   urgent: boolean;
@@ -325,6 +327,7 @@ export async function createListing(input: NewListing): Promise<Listing> {
       crew_size: input.crewSize,
       title: input.title,
       detail: input.detail,
+      description: input.description,
       city: input.city,
       location: input.location,
       urgent: input.urgent,

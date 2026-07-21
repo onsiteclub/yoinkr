@@ -70,6 +70,12 @@ export function FeedCard({
           <Text style={styles.detail}>· {listing.detail}</Text>
         </View>
 
+        {!!listing.description && (
+          <Text numberOfLines={2} style={styles.desc}>
+            {listing.description}
+          </Text>
+        )}
+
         <View style={styles.footer}>
           <PressableScale style={styles.author} onPress={() => onPressAuthor?.(listing)}>
             <Avatar letter={listing.author.fullName[0] ?? "?"} size={30} />
@@ -132,6 +138,7 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   pay: { fontFamily: fonts.display, fontSize: 19, fontWeight: "800", color: colors.ink },
   detail: { fontSize: 12.5, color: colors.inkMid },
+  desc: { fontSize: 12.5, color: colors.inkMid, lineHeight: 17, marginTop: -4, marginBottom: 12 },
   footer: {
     flexDirection: "row",
     alignItems: "center",

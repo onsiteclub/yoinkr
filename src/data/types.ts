@@ -39,6 +39,7 @@ export interface Listing {
   pay: string; // display string composed from payModel + rate
   title: string;
   detail: string; // short extra ("weekend", "1 day", "used, 2 batteries")
+  description: string; // long body — scope/schedule on jobs, pitch on offers
   city: string; // region gate — Ottawa only at launch
   location: string; // neighbourhood within the city ("Kanata", "Nepean")
   distanceKm?: number; // distance from the viewer — decisive hiring factor.

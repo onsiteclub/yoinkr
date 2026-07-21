@@ -74,6 +74,12 @@ export function FeedCardWide({
           {listing.detail ? `  ·  ${listing.detail}` : ""}
         </Text>
 
+        {!!listing.description && (
+          <Text numberOfLines={2} style={styles.desc}>
+            {listing.description}
+          </Text>
+        )}
+
         <View style={styles.footer}>
           <PressableScale style={styles.author} onPress={() => onPressAuthor?.(listing)}>
             <Avatar letter={listing.author.fullName[0] ?? "?"} size={26} />
@@ -120,6 +126,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 16.5, fontFamily: fonts.bodyBold, color: colors.inkBrand, lineHeight: 22, marginTop: 6 },
   locationRow: { marginTop: 6 },
   meta: { fontSize: 12.5, color: colors.tertiary, marginTop: 4 },
+  desc: { fontSize: 12.5, color: colors.secondary, lineHeight: 17, marginTop: 6 },
   footer: {
     flexDirection: "row",
     alignItems: "center",

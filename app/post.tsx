@@ -50,6 +50,7 @@ export default function PostScreen() {
   const [crewSize, setCrewSize] = useState(1);
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
+  const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [urgent, setUrgent] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -112,6 +113,10 @@ export default function PostScreen() {
         : "Milwaukee M18 drill — full kit";
   const detailPlaceholder =
     type === "job" ? "weekend · starts 7am" : type === "available" ? "10 yrs · own tools" : "used, 2 batteries";
+  const descriptionPlaceholder =
+    type === "job"
+      ? "Scope, schedule, site conditions, what you supply (material, nail gun, lift)…"
+      : "Your experience, what you bring, when you can start…";
 
   const addPhoto = async () => {
     try {
@@ -137,6 +142,7 @@ export default function PostScreen() {
       crewSize: isTool ? 1 : crewSize,
       title: title.trim(),
       detail: detail.trim(),
+      description: description.trim(),
       city,
       location: location.trim() || "Ottawa area",
       urgent: type === "job" ? urgent : false,
@@ -285,7 +291,17 @@ export default function PostScreen() {
           </View>
 
           <Field label="Title" value={title} onChangeText={setTitle} placeholder={titlePlaceholder} />
-          <Field label="Detail" value={detail} onChangeText={setDetail} placeholder={detailPlaceholder} />
+          {!isTool && (
+            <Field
+              label="Description"
+              value={description}
+              onChangeText={setDescription}
+              placeholder={descriptionPlaceholder}
+              multiline
+              style={[styles.input, styles.descriptionInput]}
+            />
+          )}
+          <Field label="Short tag" value={detail} onChangeText={setDetail} placeholder={detailPlaceholder} />
           <Field label="Location" value={location} onChangeText={setLocation} placeholder="Kanata" />
 
           {type === "job" && (
@@ -355,12 +371,13 @@ function PayChip({ label, active, onPress }: { label: string; active: boolean; o
 
 function Field({
   label,
+  style,
   ...props
 }: { label: string } & React.ComponentProps<typeof TextInput>) {
   return (
     <View style={{ marginTop: 14 }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput style={styles.input} placeholderTextColor={colors.inkLo} {...props} />
+      <TextInput style={style ?? styles.input} placeholderTextColor={colors.inkLo} {...props} />
     </View>
   );
 }
@@ -440,6 +457,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.ink,
   },
+  descriptionInput: { minHeight: 96, textAlignVertical: "top" },
   urgentRow: {
     marginTop: 18,
     flexDirection: "row",

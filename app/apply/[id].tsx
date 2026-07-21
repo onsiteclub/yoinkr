@@ -67,6 +67,9 @@ export default function ApplyScreen() {
               <Text style={styles.jobDetail}>· {listing.detail}</Text>
               <Text style={styles.jobPlace}>📍 {listing.location}</Text>
             </View>
+            {!!listing.description && (
+              <Text style={styles.jobDesc}>{listing.description}</Text>
+            )}
             <View style={styles.jobAuthor}>
               <Text style={styles.jobBy}>{listing.author.fullName}</Text>
               <TrustInline trust={listing.author.trustScore} dealsClosed={listing.author.dealsClosed} />
@@ -143,6 +146,7 @@ const styles = StyleSheet.create({
   jobMeta: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
   jobPay: { fontFamily: fonts.display, fontSize: 17, fontWeight: "800", color: colors.ink },
   jobDetail: { fontSize: 12, color: colors.inkMid },
+  jobDesc: { fontSize: 13, color: colors.inkMid, lineHeight: 19, marginTop: 8 },
   jobPlace: { marginLeft: "auto", fontSize: 11.5, color: colors.inkLo },
   jobAuthor: {
     flexDirection: "row",
