@@ -15,13 +15,14 @@ import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
 import { pickAndUploadPhoto } from "@/data/photos";
 import { createListing, getMyProfile } from "@/data/repository";
-import { hasAccount } from "@/data/supabase";
+import { hasAccount, supabase } from "@/data/supabase";
 import {
   CATEGORIES,
   type CategoryId,
   type PayModel,
   allowsPiecework,
   categoryLabel,
+  payLabel,
 } from "@/data/categories";
 import type { ListingType } from "@/data/types";
 import { useRegion } from "@/store/useRegion";
@@ -56,6 +57,11 @@ export default function PostScreen() {
   const [saving, setSaving] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  // "Fix my ad with AI": draft in any language → clean job-site English via
+  // the polish-listing edge function (key stays server-side). Suggestion is
+  // shown for approval, never applied silently.
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<{ title: string; description: string } | null>(null);
 
   // Posting is an interaction — guests get the welcome screen instead.
   useEffect(() => {
@@ -127,6 +133,26 @@ export default function PostScreen() {
       console.warn("photo upload failed", e);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const polish = async () => {
+    if (aiBusy || (!title.trim() && !description.trim())) return;
+    setAiBusy(true);
+    setAiSuggestion(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("polish-listing", {
+        body: {
+          type,
+          category: isTool ? null : category,
+          pay: rateOk ? payLabel(effectiveModel, rateNum) : null,
+          title: title.trim(),
+          description: description.trim(),
+        },
+      });
+      if (!error && data?.title) setAiSuggestion(data);
+    } finally {
+      setAiBusy(false);
     }
   };
 
@@ -284,14 +310,47 @@ export default function PostScreen() {
 
           <Field label="Title" value={title} onChangeText={setTitle} placeholder={titlePlaceholder} />
           {!isTool && (
-            <Field
-              label="Description"
-              value={description}
-              onChangeText={setDescription}
-              placeholder={descriptionPlaceholder}
-              multiline
-              style={[styles.input, styles.descriptionInput]}
-            />
+            <>
+              <Field
+                label="Description"
+                value={description}
+                onChangeText={setDescription}
+                placeholder={descriptionPlaceholder}
+                multiline
+                style={[styles.input, styles.descriptionInput]}
+              />
+              <PressableScale
+                style={[styles.aiBtn, { opacity: title.trim() || description.trim() ? 1 : 0.5 }]}
+                disabled={aiBusy || (!title.trim() && !description.trim())}
+                onPress={polish}
+              >
+                <Text style={styles.aiBtnText}>
+                  {aiBusy ? "✨ Fixing…" : "✨ Fix my ad with AI — write in any language"}
+                </Text>
+              </PressableScale>
+              {aiSuggestion && (
+                <View style={styles.aiCard}>
+                  <Text style={styles.aiCardLabel}>SUGGESTION</Text>
+                  <Text style={styles.aiCardTitle}>{aiSuggestion.title}</Text>
+                  <Text style={styles.aiCardBody}>{aiSuggestion.description}</Text>
+                  <View style={styles.aiCardRow}>
+                    <PressableScale style={styles.aiDismiss} onPress={() => setAiSuggestion(null)}>
+                      <Text style={styles.aiDismissText}>Keep mine</Text>
+                    </PressableScale>
+                    <PressableScale
+                      style={styles.aiUse}
+                      onPress={() => {
+                        setTitle(aiSuggestion.title);
+                        setDescription(aiSuggestion.description);
+                        setAiSuggestion(null);
+                      }}
+                    >
+                      <Text style={styles.aiUseText}>Use it</Text>
+                    </PressableScale>
+                  </View>
+                </View>
+              )}
+            </>
           )}
           <Field label="Short tag" value={detail} onChangeText={setDetail} placeholder={detailPlaceholder} />
           <Field label="Location" value={location} onChangeText={setLocation} placeholder="Kanata" />
@@ -450,6 +509,46 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   descriptionInput: { minHeight: 96, textAlignVertical: "top" },
+  aiBtn: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: colors.card,
+  },
+  aiBtnText: { fontSize: 12.5, fontWeight: "700", color: colors.inkMid },
+  aiCard: {
+    marginTop: 10,
+    backgroundColor: colors.safetyBg,
+    borderWidth: 1,
+    borderColor: "#F0D68A",
+    borderRadius: 12,
+    padding: 13,
+  },
+  aiCardLabel: { fontSize: 9.5, fontWeight: "800", letterSpacing: 1, color: colors.safetyInk },
+  aiCardTitle: { fontSize: 14.5, fontWeight: "800", color: colors.ink, marginTop: 6 },
+  aiCardBody: { fontSize: 13, color: colors.inkMid, lineHeight: 18, marginTop: 5 },
+  aiCardRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  aiDismiss: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: "center",
+    backgroundColor: colors.card,
+  },
+  aiDismissText: { fontSize: 12.5, fontWeight: "700", color: colors.inkMid },
+  aiUse: {
+    flex: 1,
+    backgroundColor: colors.safety,
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  aiUseText: { fontSize: 12.5, fontFamily: fonts.display, color: colors.white },
   urgentRow: {
     marginTop: 18,
     flexDirection: "row",
