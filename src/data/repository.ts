@@ -466,6 +466,34 @@ export async function markDealDone(dealId: string): Promise<void> {
   if (error) throw error;
 }
 
+// Pending yoinks on MY jobs — feeds the "review your crew" reminder banner.
+// Discovery matters: without it the author only notices applications by
+// spotting the Crew (N) counter on their own card.
+export interface IncomingYoinks {
+  listingId: string;
+  title: string;
+  count: number;
+}
+
+export async function getIncomingYoinks(): Promise<IncomingYoinks[]> {
+  const uid = await currentUserId();
+  if (!uid) return [];
+  const { data, error } = await supabase
+    .from("applications")
+    .select("id, listing:listings!inner(id,title,author_id)")
+    .eq("listing.author_id", uid)
+    .eq("status", "pending");
+  if (error) throw error;
+  const byListing: Record<string, IncomingYoinks> = {};
+  for (const a of data ?? []) {
+    const l = (a as any).listing;
+    if (!l) continue;
+    byListing[l.id] ??= { listingId: l.id, title: l.title, count: 0 };
+    byListing[l.id].count += 1;
+  }
+  return Object.values(byListing);
+}
+
 // Deals I finished but haven't rated yet — feeds the "rate the work" reminder
 // banner (in-app for now; push notifications are a later phase).
 export interface PendingRating {

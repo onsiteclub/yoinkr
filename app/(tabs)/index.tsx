@@ -9,10 +9,12 @@ import { PressableScale } from "@/components/PressableScale";
 import { requireAccount } from "@/lib/gate";
 import { CARD_HORIZONTAL_MIN, useResponsive } from "@/lib/responsive";
 import {
+  getIncomingYoinks,
   getListings,
   getOrCreateConversation,
   getPendingRatings,
   getWeekendJobCount,
+  type IncomingYoinks,
   type PendingRating,
 } from "@/data/repository";
 import { REGIONS } from "@/data/regions";
@@ -35,11 +37,14 @@ export default function FeedScreen() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [count, setCount] = useState(0);
   const [pendingRatings, setPendingRatings] = useState<PendingRating[]>([]);
+  const [incomingYoinks, setIncomingYoinks] = useState<IncomingYoinks[]>([]);
 
   const load = useCallback(() => {
     getListings({ type, category, city }).then(setListings);
     getWeekendJobCount(city).then(setCount);
-    // "Deal closed — rate the work" reminders (empty for guests).
+    // Reminder banners (both empty for guests): new yoinks on my jobs,
+    // finished deals waiting for my rating.
+    getIncomingYoinks().then(setIncomingYoinks).catch(() => {});
     getPendingRatings().then(setPendingRatings).catch(() => {});
   }, [type, category, city]);
 
@@ -99,6 +104,19 @@ export default function FeedScreen() {
       {/* Content column: full-width on mobile, capped at contentWidth on md+ (§3) */}
       <ScrollView contentContainerStyle={[styles.list, !isMobile && styles.listWide]}>
         <View style={!isMobile && { maxWidth: contentWidth, width: "100%", alignSelf: "center" }}>
+          {incomingYoinks.map((y) => (
+            <PressableScale
+              key={y.listingId}
+              style={styles.yoinkBanner}
+              onPress={() =>
+                router.push({ pathname: "/applicants/[id]", params: { id: y.listingId } })
+              }
+            >
+              <Text style={styles.yoinkBannerText}>
+                🪝 {y.count} yoink{y.count > 1 ? "s" : ""} on “{y.title}” — review your crew.
+              </Text>
+            </PressableScale>
+          ))}
           {pendingRatings.map((p) => (
             <PressableScale
               key={p.deal.id}
@@ -163,6 +181,16 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   rateBannerText: { fontSize: 12.5, fontWeight: "700", color: "#0a6b41" },
+  yoinkBanner: {
+    backgroundColor: colors.safetyBg,
+    borderWidth: 1,
+    borderColor: "#F0D68A",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 10,
+  },
+  yoinkBannerText: { fontSize: 12.5, fontWeight: "700", color: colors.safetyInk },
   listWide: { paddingHorizontal: 24, paddingTop: 20 },
   empty: { textAlign: "center", color: colors.inkLo, marginTop: 40, fontSize: 13 },
   comingSoon: { alignItems: "center", paddingHorizontal: 30, paddingTop: 50 },
