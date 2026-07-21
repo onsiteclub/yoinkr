@@ -8,11 +8,14 @@ export function useSignedIn(): boolean | null {
 
   useEffect(() => {
     let mounted = true;
+    // Legacy anonymous sessions don't count as accounts.
+    const real = (session: { user: { is_anonymous?: boolean } } | null) =>
+      !!session && !session.user.is_anonymous;
     supabase.auth.getSession().then(({ data }) => {
-      if (mounted) setSignedIn(!!data.session);
+      if (mounted) setSignedIn(real(data.session));
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) setSignedIn(!!session);
+      if (mounted) setSignedIn(real(session));
     });
     return () => {
       mounted = false;

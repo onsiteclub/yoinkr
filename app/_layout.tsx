@@ -2,13 +2,20 @@ import { Figtree_500Medium, Figtree_600SemiBold, Figtree_700Bold } from "@expo-g
 import { Manrope_700Bold, Manrope_800ExtraBold, useFonts } from "@expo-google-fonts/manrope";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { dropLegacyAnonSession } from "@/data/supabase";
 import { colors } from "@/theme/colors";
 
 // No session bootstrap: browsing is sessionless (public reads); a session
-// only exists after real login/signup on the welcome screen.
+// only exists after real login/signup on the welcome screen. Devices that
+// used the old anon-first model get their leftover anonymous session dropped.
 export default function RootLayout() {
+  useEffect(() => {
+    void dropLegacyAnonSession();
+  }, []);
+
   const [fontsLoaded] = useFonts({
     Manrope_700Bold,
     Manrope_800ExtraBold,

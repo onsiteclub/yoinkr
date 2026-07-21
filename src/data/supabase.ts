@@ -43,7 +43,10 @@ export function ensureUserId(): Promise<string> {
     sessionPromise = (async () => {
       const { data } = await supabase.auth.getSession();
       const user = data.session?.user;
-      if (!user) throw new Error("Create a free account to do that — browsing needs none.");
+      // Legacy anonymous sessions (pre-tester model) don't count as accounts.
+      if (!user || user.is_anonymous) {
+        throw new Error("Create a free account to do that — browsing needs none.");
+      }
       // Make sure the profile row exists (no-op when it already does).
       await supabase
         .from("profiles")
@@ -65,9 +68,20 @@ export async function currentUserId(): Promise<string | null> {
 
 // ---- real accounts (one Onsite account across the whole holding) ----
 
-// True when someone is signed in — the "may interact" check.
+// True when someone is signed in with a REAL account — the "may interact"
+// check. Leftover anonymous sessions from the pre-tester model don't count.
 export async function hasAccount(): Promise<boolean> {
-  return (await currentUserId()) != null;
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user;
+  return !!user && !user.is_anonymous;
+}
+
+// Boot cleanup: browsers that used the old anon-first model still hold an
+// anonymous session in storage — sign it out so those devices become plain
+// guests instead of half-logged-in "New worker" accounts.
+export async function dropLegacyAnonSession(): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  if (data.session?.user.is_anonymous) await supabase.auth.signOut();
 }
 
 // Existing account, any Onsite app. Replaces whatever session was active.

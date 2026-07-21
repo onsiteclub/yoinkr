@@ -67,10 +67,13 @@ export default function WelcomeScreen() {
     try {
       if (mode === "login") {
         await signInWithEmail(email.trim(), password);
+        enter();
       } else {
         await signUpWithEmail(email.trim(), password);
+        // Fresh account → profile setup once, right now (skippable "Later").
+        enter();
+        router.push("/setup");
       }
-      enter();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(
