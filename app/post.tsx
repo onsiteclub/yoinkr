@@ -255,11 +255,17 @@ export default function PostScreen() {
                 </PressableScale>
               </Placeholder>
             ) : (
-              <PressableScale style={styles.photoBtn} onPress={addPhoto} disabled={uploading}>
-                <Text style={styles.photoBtnText}>
-                  {uploading ? "Uploading…" : "＋ Add photo"}
+              <>
+                <PressableScale style={styles.photoBtn} onPress={addPhoto} disabled={uploading}>
+                  <Text style={styles.photoBtnText}>
+                    {uploading ? "Uploading…" : "＋ Add photo"}
+                  </Text>
+                </PressableScale>
+                <Text style={styles.photoHint}>
+                  📷 Photos make a real difference — listings with a real photo get more replies
+                  and fewer back-and-forth questions.
                 </Text>
-              </PressableScale>
+              </>
             )}
           </View>
 
@@ -385,6 +391,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   photoBtnText: { fontSize: 13.5, fontWeight: "700", color: colors.inkMid },
+  photoHint: { marginTop: 8, fontSize: 11.5, color: colors.inkLo, lineHeight: 16 },
   photoPreview: {
     marginTop: 8,
     height: 160,

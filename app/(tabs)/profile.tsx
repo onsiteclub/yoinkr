@@ -3,10 +3,10 @@ import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { AccountGate } from "@/components/AccountGate";
 import { Avatar } from "@/components/Avatar";
+import { CategoryPhoto, SamplePill, categoryPhotoCount } from "@/components/CategoryPhoto";
 import { Header } from "@/components/Header";
 import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
-import { SamplePill, TradeArt } from "@/components/TradeArt";
 import { Verified } from "@/components/Verified";
 import { categoryLabel, categoryLabels } from "@/data/categories";
 import { addPortfolioPhoto } from "@/data/photos";
@@ -169,13 +169,13 @@ export default function ProfileScreen() {
               <Text style={styles.gridLabel}>{p.caption}</Text>
             </Placeholder>
           ))}
-          {/* Category-default art until the user adds real work photos. */}
+          {/* Bundled category photos until the user adds real work photos. */}
           {portfolio.length === 0 &&
             myCategory &&
-            [0, 1, 2].map((v) => (
-              <TradeArt key={v} category={myCategory} variant={v} style={styles.gridItem}>
+            Array.from({ length: categoryPhotoCount(myCategory) }, (_, v) => (
+              <CategoryPhoto key={v} category={myCategory} variant={v} style={styles.gridItem}>
                 <SamplePill />
-              </TradeArt>
+              </CategoryPhoto>
             ))}
         </View>
         {portfolio.length === 0 && myCategory && (

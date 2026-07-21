@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "@/components/Avatar";
+import { CategoryPhoto, SamplePill, categoryPhotoCount } from "@/components/CategoryPhoto";
 import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
-import { SamplePill, TradeArt } from "@/components/TradeArt";
 import { Verified } from "@/components/Verified";
 import {
   CATEGORIES,
@@ -229,10 +229,10 @@ export default function WorkerProfileScreen() {
                     </Placeholder>
                   ))
                 : artCategory &&
-                  [0, 1, 2].map((v) => (
-                    <TradeArt key={v} category={artCategory} variant={v} style={styles.gridItem}>
+                  Array.from({ length: categoryPhotoCount(artCategory) }, (_, v) => (
+                    <CategoryPhoto key={v} category={artCategory} variant={v} style={styles.gridItem}>
                       <SamplePill />
-                    </TradeArt>
+                    </CategoryPhoto>
                   ))}
             </View>
             {portfolio.length === 0 && artCategory && (

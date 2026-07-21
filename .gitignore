@@ -21,3 +21,4 @@ expo-env.d.ts
 # misc
 *.log
 .DS_Store
+assets/categories/raw/
