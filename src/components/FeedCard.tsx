@@ -23,12 +23,17 @@ export function FeedCard({
   const isMine = listing.mine ?? false;
 
   // Primary action per card type/ownership (vocabulary per brand doc §9:
-  // Apply → "Yoink it", candidates → crew):
-  //   my worker post → Edit · my job → Crew (N) · someone's job →
-  //   Yoink it / Yoinked ✓ · someone's worker post → View profile · tool → Message
+  // Apply → "Yoink it", candidates → crew). Lifecycle overrides: closed ads
+  // take no new contact; pending jobs stop taking yoinks.
   let action = "Message";
   let disabled = false;
-  if (isMine && listing.type === "available") action = "Edit";
+  if (listing.status === "closed" && !(isMine && listing.type === "job")) {
+    action = "Closed";
+    disabled = true;
+  } else if (listing.status === "pending" && listing.type === "job" && !isMine && !listing.appliedByMe) {
+    action = "Pending";
+    disabled = true;
+  } else if (isMine && listing.type === "available") action = "Edit";
   else if (isMine && listing.type === "job") action = `Crew (${listing.applicants ?? 0})`;
   else if (listing.type === "job" && listing.appliedByMe) {
     action = "Yoinked ✓";
@@ -37,6 +42,13 @@ export function FeedCard({
   else if (listing.type === "available") action = "View profile";
   return (
     <View style={styles.card}>
+      {listing.status !== "open" && (
+        <View style={[styles.lifeBar, listing.status === "pending" ? styles.lifePending : styles.lifeClosed]}>
+          <Text style={[styles.lifeText, { color: listing.status === "pending" ? colors.safetyInk : colors.inkMid }]}>
+            {listing.status === "pending" ? "⏳ PENDING — deal in progress" : "✓ CLOSED"}
+          </Text>
+        </View>
+      )}
       {listing.photoUrl || listing.category ? (
         <Placeholder
           photoUrl={listing.photoUrl}
@@ -129,6 +141,10 @@ const styles = StyleSheet.create({
     marginBottom: 11,
     overflow: "hidden",
   },
+  lifeBar: { paddingVertical: 6, alignItems: "center" },
+  lifePending: { backgroundColor: colors.safetyBg },
+  lifeClosed: { backgroundColor: colors.bg, borderBottomWidth: 1, borderBottomColor: colors.line },
+  lifeText: { fontSize: 10.5, fontWeight: "800", letterSpacing: 0.6 },
   photo: { height: 130, justifyContent: "flex-start" },
   photoBadges: { flexDirection: "row", gap: 6, padding: 10 },
   noPhotoBadges: { flexDirection: "row", gap: 6, paddingTop: 14, paddingHorizontal: 14 },

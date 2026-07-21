@@ -261,10 +261,12 @@ export async function getListings(filter: FeedFilter): Promise<Listing[]> {
     Tools: "tool",
   };
   const myId = await currentUserId();
+  // Pending/closed ads stay in the feed with a status bar (FB Marketplace
+  // pattern) — the cards disable their actions instead of vanishing.
   let q = supabase
     .from("listings")
     .select(LISTING_SELECT)
-    .eq("status", "open")
+    .in("status", ["open", "pending", "closed"])
     .eq("city", filter.city)
     .order("created_at", { ascending: false });
   const wantedType = typeFor[filter.type];
@@ -462,6 +464,40 @@ export async function getDealWith(otherId: string, listingId: string): Promise<D
 export async function markDealDone(dealId: string): Promise<void> {
   const { error } = await supabase.from("deals").update({ state: "done" }).eq("id", dealId);
   if (error) throw error;
+}
+
+// Deals I finished but haven't rated yet — feeds the "rate the work" reminder
+// banner (in-app for now; push notifications are a later phase).
+export interface PendingRating {
+  deal: Deal;
+  otherId: string;
+  otherName: string;
+}
+
+export async function getPendingRatings(): Promise<PendingRating[]> {
+  const uid = await currentUserId();
+  if (!uid) return [];
+  const { data, error } = await supabase.from("deals").select("*").eq("state", "done");
+  if (error) throw error;
+  const deals = (data ?? []).map(mapDeal);
+  if (deals.length === 0) return [];
+  const { data: mine } = await supabase
+    .from("ratings")
+    .select("deal_id")
+    .eq("rater_id", uid)
+    .in("deal_id", deals.map((d) => d.id));
+  const rated = new Set((mine ?? []).map((r: any) => r.deal_id));
+  const pending = deals.filter((d) => !rated.has(d.id));
+  if (pending.length === 0) return [];
+  const otherIds = pending.map((d) => (d.workerId === uid ? d.hirerId : d.workerId));
+  const { data: profs } = await supabase.from("profiles").select("id,full_name").in("id", otherIds);
+  const names: Record<string, string> = Object.fromEntries(
+    (profs ?? []).map((p: any) => [p.id, p.full_name])
+  );
+  return pending.map((d) => {
+    const otherId = d.workerId === uid ? d.hirerId : d.workerId;
+    return { deal: d, otherId, otherName: names[otherId] ?? "—" };
+  });
 }
 
 // My side of the double-blind rating (RLS always shows me my own rating).

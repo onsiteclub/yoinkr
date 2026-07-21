@@ -27,7 +27,13 @@ export function FeedCardWide({
 
   let action = "Message";
   let disabled = false;
-  if (isMine && listing.type === "available") action = "Edit";
+  if (listing.status === "closed" && !(isMine && listing.type === "job")) {
+    action = "Closed";
+    disabled = true;
+  } else if (listing.status === "pending" && listing.type === "job" && !isMine && !listing.appliedByMe) {
+    action = "Pending";
+    disabled = true;
+  } else if (isMine && listing.type === "available") action = "Edit";
   else if (isMine && listing.type === "job") action = `Crew (${listing.applicants ?? 0})`;
   else if (listing.type === "job" && listing.appliedByMe) {
     action = "Yoinked ✓";
@@ -36,7 +42,15 @@ export function FeedCardWide({
   else if (listing.type === "available") action = "View profile";
 
   return (
-    <View style={styles.card}>
+    <View style={styles.cardWrap}>
+      {listing.status !== "open" && (
+        <View style={[styles.lifeBar, listing.status === "pending" ? styles.lifePending : styles.lifeClosed]}>
+          <Text style={[styles.lifeText, { color: listing.status === "pending" ? colors.accentDark : colors.tertiary }]}>
+            {listing.status === "pending" ? "⏳ PENDING — deal in progress" : "✓ CLOSED"}
+          </Text>
+        </View>
+      )}
+      <View style={styles.card}>
       {/* photo (left) */}
       <Placeholder
         photoUrl={listing.photoUrl}
@@ -97,19 +111,26 @@ export function FeedCardWide({
           </PressableScale>
         </View>
       </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: "row",
+  cardWrap: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 16,
     marginBottom: 14,
     overflow: "hidden",
+  },
+  lifeBar: { paddingVertical: 6, alignItems: "center" },
+  lifePending: { backgroundColor: colors.accentTint },
+  lifeClosed: { backgroundColor: colors.paper, borderBottomWidth: 1, borderBottomColor: colors.border },
+  lifeText: { fontSize: 10.5, fontFamily: fonts.bodySemi, letterSpacing: 0.6 },
+  card: {
+    flexDirection: "row",
   },
   photo: { width: 200, minHeight: 156, justifyContent: "flex-start" },
   photoBadges: { flexDirection: "row", gap: 6, padding: 10 },

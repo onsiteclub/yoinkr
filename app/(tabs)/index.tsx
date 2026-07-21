@@ -8,7 +8,13 @@ import { Header } from "@/components/Header";
 import { PressableScale } from "@/components/PressableScale";
 import { requireAccount } from "@/lib/gate";
 import { CARD_HORIZONTAL_MIN, useResponsive } from "@/lib/responsive";
-import { getListings, getOrCreateConversation, getWeekendJobCount } from "@/data/repository";
+import {
+  getListings,
+  getOrCreateConversation,
+  getPendingRatings,
+  getWeekendJobCount,
+  type PendingRating,
+} from "@/data/repository";
 import { REGIONS } from "@/data/regions";
 import type { Listing } from "@/data/types";
 import { useFeedFilter } from "@/store/useFeedFilter";
@@ -28,10 +34,13 @@ export default function FeedScreen() {
   const category = useFeedFilter((s) => s.category);
   const [listings, setListings] = useState<Listing[]>([]);
   const [count, setCount] = useState(0);
+  const [pendingRatings, setPendingRatings] = useState<PendingRating[]>([]);
 
   const load = useCallback(() => {
     getListings({ type, category, city }).then(setListings);
     getWeekendJobCount(city).then(setCount);
+    // "Deal closed — rate the work" reminders (empty for guests).
+    getPendingRatings().then(setPendingRatings).catch(() => {});
   }, [type, category, city]);
 
   useEffect(() => {
@@ -90,6 +99,21 @@ export default function FeedScreen() {
       {/* Content column: full-width on mobile, capped at contentWidth on md+ (§3) */}
       <ScrollView contentContainerStyle={[styles.list, !isMobile && styles.listWide]}>
         <View style={!isMobile && { maxWidth: contentWidth, width: "100%", alignSelf: "center" }}>
+          {pendingRatings.map((p) => (
+            <PressableScale
+              key={p.deal.id}
+              style={styles.rateBanner}
+              onPress={() =>
+                getOrCreateConversation(p.otherId, p.deal.listingId).then((convId) =>
+                  router.push({ pathname: "/chat/[id]", params: { id: convId } })
+                )
+              }
+            >
+              <Text style={styles.rateBannerText}>
+                ⭐ Deal closed with {p.otherName} — how was the work? Tap to rate.
+              </Text>
+            </PressableScale>
+          ))}
           {!cityIsLive ? (
             <ComingSoon city={city} />
           ) : listings.length === 0 ? (
@@ -129,6 +153,16 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, color: colors.inkMid, fontWeight: "500" },
   count: { color: colors.hazard, fontWeight: "800" },
   list: { padding: 14, paddingBottom: 30 },
+  rateBanner: {
+    backgroundColor: colors.goodBg,
+    borderWidth: 1,
+    borderColor: colors.goodLine,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 10,
+  },
+  rateBannerText: { fontSize: 12.5, fontWeight: "700", color: "#0a6b41" },
   listWide: { paddingHorizontal: 24, paddingTop: 20 },
   empty: { textAlign: "center", color: colors.inkLo, marginTop: 40, fontSize: 13 },
   comingSoon: { alignItems: "center", paddingHorizontal: 30, paddingTop: 50 },

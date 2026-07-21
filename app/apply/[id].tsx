@@ -36,7 +36,8 @@ export default function ApplyScreen() {
     if (id) getListing(id).then(setListing);
   }, [id]);
 
-  const canSend = message.trim().length > 0 && !saving;
+  const isOpen = listing?.status === "open";
+  const canSend = message.trim().length > 0 && !saving && isOpen;
 
   const submit = async () => {
     if (!canSend || !listing) return;
@@ -69,6 +70,13 @@ export default function ApplyScreen() {
             </View>
             {!!listing.description && (
               <Text style={styles.jobDesc}>{listing.description}</Text>
+            )}
+            {!isOpen && (
+              <Text style={styles.closedNote}>
+                {listing.status === "pending"
+                  ? "⏳ This job is pending — a deal is already in progress."
+                  : "✓ This job is closed — it's not taking new yoinks."}
+              </Text>
             )}
             <View style={styles.jobAuthor}>
               <Text style={styles.jobBy}>{listing.author.fullName}</Text>
@@ -147,6 +155,7 @@ const styles = StyleSheet.create({
   jobPay: { fontFamily: fonts.display, fontSize: 17, fontWeight: "800", color: colors.ink },
   jobDetail: { fontSize: 12, color: colors.inkMid },
   jobDesc: { fontSize: 13, color: colors.inkMid, lineHeight: 19, marginTop: 8 },
+  closedNote: { fontSize: 12.5, color: colors.safetyInk, fontWeight: "700", marginTop: 10 },
   jobPlace: { marginLeft: "auto", fontSize: 11.5, color: colors.inkLo },
   jobAuthor: {
     flexDirection: "row",

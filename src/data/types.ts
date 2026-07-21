@@ -46,7 +46,10 @@ export interface Listing {
   distanceKm?: number; // distance from the viewer — decisive hiring factor.
   urgent: boolean;
   photoUrl: string | null; // Supabase Storage path; null => category artwork
-  status: "open" | "closed";
+  // Lifecycle follows the deal (DB trigger): open → pending (deal agreed) →
+  // closed (work done). Pending/closed ads stay visible with a status bar;
+  // closed ones take no new yoinks or messages.
+  status: "open" | "pending" | "closed";
   createdAt: string;
   // Denormalized author info for fast feed rendering.
   author: Pick<Profile, "fullName" | "trustScore" | "dealsClosed" | "verified">;
