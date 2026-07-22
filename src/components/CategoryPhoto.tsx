@@ -9,11 +9,35 @@ import { fonts } from "@/theme/fonts";
 // Bundled in the app: zero Storage egress. The SAMPLE pill keeps system
 // photos from ever passing as the worker's own work (trust rule).
 const PHOTOS: Record<CategoryId, number[]> = {
-  framing: [require("../../assets/categories/framing.jpg")],
-  roof_framing: [require("../../assets/categories/roof-framing.jpg")],
-  backframing: [require("../../assets/categories/backframing-1.jpg")],
-  strapping: [require("../../assets/categories/strapping.jpg")],
-  general_labour: [require("../../assets/categories/general-labour.jpg")],
+  framing: [
+    require("../../assets/categories/framing-1.jpg"),
+    require("../../assets/categories/framing-2.jpg"),
+    require("../../assets/categories/framing-3.jpg"),
+    require("../../assets/categories/framing-4.jpg"),
+    require("../../assets/categories/framing-5.jpg"),
+  ],
+  roof_framing: [
+    require("../../assets/categories/roof-framing-1.jpg"),
+    require("../../assets/categories/roof-framing-2.jpg"),
+    require("../../assets/categories/roof-framing-3.jpg"),
+    require("../../assets/categories/roof-framing-4.jpg"),
+  ],
+  backframing: [
+    require("../../assets/categories/backframing-1.jpg"),
+    require("../../assets/categories/backframing-2.jpg"),
+    require("../../assets/categories/backframing-3.jpg"),
+    require("../../assets/categories/backframing-4.jpg"),
+  ],
+  strapping: [
+    require("../../assets/categories/strapping-1.jpg"),
+    require("../../assets/categories/strapping-2.jpg"),
+    require("../../assets/categories/strapping-3.jpg"),
+  ],
+  general_labour: [
+    require("../../assets/categories/general-labour-1.jpg"),
+    require("../../assets/categories/general-labour-2.jpg"),
+    require("../../assets/categories/general-labour-3.jpg"),
+  ],
 };
 
 export function categoryPhotoCount(category: CategoryId): number {
