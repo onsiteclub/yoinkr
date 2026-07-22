@@ -11,6 +11,7 @@ export type ListingType = "job" | "tool" | "available";
 export interface Profile {
   id: string;
   fullName: string;
+  avatarUrl: string | null; // profile photo; null → initial-letter fallback
   categories: CategoryId[]; // what they do — empty for hirer-only profiles
   hires: boolean; // posts jobs / takes crews — true for contractors
   yearsExp: number;
@@ -52,7 +53,7 @@ export interface Listing {
   status: "open" | "pending" | "closed";
   createdAt: string;
   // Denormalized author info for fast feed rendering.
-  author: Pick<Profile, "fullName" | "trustScore" | "dealsClosed" | "verified">;
+  author: Pick<Profile, "fullName" | "avatarUrl" | "trustScore" | "dealsClosed" | "verified">;
   when: string;
   // Application state, denormalized for the feed (jobs only).
   applicants?: number; // how many applied (shown to the job's author)
@@ -72,7 +73,7 @@ export interface Application {
   createdAt: string;
   applicant: Pick<
     Profile,
-    "fullName" | "categories" | "yearsExp" | "trustScore" | "dealsClosed" | "verified"
+    "fullName" | "avatarUrl" | "categories" | "yearsExp" | "trustScore" | "dealsClosed" | "verified"
   >;
 }
 
@@ -97,7 +98,7 @@ export interface Vouch {
   category: CategoryId;
   comment: string;
   when: string;
-  voucher: Pick<Profile, "fullName" | "trustScore" | "verified">;
+  voucher: Pick<Profile, "fullName" | "avatarUrl" | "trustScore" | "verified">;
 }
 
 export interface Conversation {
@@ -141,7 +142,8 @@ export interface ChatSummary {
   otherId: string; // the other participant's profile id
   listingId: string | null; // listing the conversation is about (deal lookup)
   name: string;
-  avatar: string;
+  avatar: string; // initial-letter fallback
+  avatarUrl: string | null;
   trust: number | null;
   lastMessage: string;
   when: string;

@@ -154,7 +154,7 @@ export default function ChatThreadScreen() {
         <PressableScale onPress={() => router.back()} hitSlop={10}>
           <Text style={styles.back}>‹</Text>
         </PressableScale>
-        <Avatar letter={chat.avatar} size={36} />
+        <Avatar letter={chat.avatar} photoUrl={chat.avatarUrl} size={36} />
         <View style={{ flex: 1 }}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{chat.name}</Text>

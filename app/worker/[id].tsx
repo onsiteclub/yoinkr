@@ -99,7 +99,7 @@ export default function WorkerProfileScreen() {
       >
         {/* identity */}
         <View style={styles.identity}>
-          <Avatar letter={profile.fullName[0] ?? "?"} size={66} />
+          <Avatar letter={profile.fullName[0] ?? "?"} photoUrl={profile.avatarUrl} size={66} />
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
               <Text style={styles.name}>{profile.fullName}</Text>
@@ -179,7 +179,7 @@ export default function WorkerProfileScreen() {
             <Text style={styles.sectionTitle}>Vouched by ({vouches.length})</Text>
             {vouches.map((v) => (
               <View key={v.id} style={styles.vouchCard}>
-                <Avatar letter={v.voucher.fullName[0] ?? "?"} size={28} />
+                <Avatar letter={v.voucher.fullName[0] ?? "?"} photoUrl={v.voucher.avatarUrl} size={28} />
                 <View style={{ flex: 1 }}>
                   <View style={styles.vouchNameRow}>
                     <Text style={styles.vouchName}>{v.voucher.fullName}</Text>

@@ -9,8 +9,8 @@ import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
 import { Verified } from "@/components/Verified";
 import { categoryLabel, roleLabel } from "@/data/categories";
-import { addPortfolioPhoto } from "@/data/photos";
-import { getMyProfile, getPortfolio, setAvailability } from "@/data/repository";
+import { addPortfolioPhoto, pickAndUploadPhoto } from "@/data/photos";
+import { getMyProfile, getPortfolio, setAvailability, setAvatar } from "@/data/repository";
 import { hasAccount } from "@/data/supabase";
 import type { PortfolioPhoto, Profile } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
@@ -55,6 +55,19 @@ export default function ProfileScreen() {
     }
   };
 
+  // Tap the avatar → pick a photo → same pipeline as every other upload.
+  const onChangeAvatar = async () => {
+    try {
+      const url = await pickAndUploadPhoto();
+      if (url) {
+        await setAvatar(url);
+        setMe(await getMyProfile());
+      }
+    } catch (e) {
+      console.warn("avatar upload failed", e);
+    }
+  };
+
   if (signedIn === false) {
     return (
       <View style={styles.screen}>
@@ -81,9 +94,14 @@ export default function ProfileScreen() {
           !isMobile && { maxWidth: contentWidth, width: "100%", alignSelf: "center" },
         ]}
       >
-        {/* identity */}
+        {/* identity — tap the avatar to set a profile photo */}
         <View style={styles.identity}>
-          <Avatar letter={me.fullName[0] ?? "?"} size={66} />
+          <PressableScale onPress={onChangeAvatar} hitSlop={6}>
+            <Avatar letter={me.fullName[0] ?? "?"} photoUrl={me.avatarUrl} size={66} />
+            <View style={styles.avatarBadge}>
+              <Text style={styles.avatarBadgeText}>📷</Text>
+            </View>
+          </PressableScale>
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
               <Text style={styles.name}>{me.fullName}</Text>
@@ -225,6 +243,20 @@ const styles = StyleSheet.create({
   trade: { fontSize: 13.5, color: colors.inkMid, marginTop: 2 },
   region: { fontSize: 12, color: colors.inkLo, marginTop: 2 },
   editLink: { fontSize: 12.5, color: colors.blue, fontWeight: "700" },
+  avatarBadge: {
+    position: "absolute",
+    bottom: -3,
+    right: -3,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 10,
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarBadgeText: { fontSize: 10 },
   newBadge: {
     fontSize: 13,
     fontWeight: "800",

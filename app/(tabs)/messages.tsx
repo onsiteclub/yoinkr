@@ -55,7 +55,7 @@ export default function MessagesScreen() {
         {chats.map((c) => (
           <PressableScale key={c.id} style={styles.row} onPress={() => router.push(`/chat/${c.id}`)}>
             <View>
-              <Avatar letter={c.avatar} size={46} />
+              <Avatar letter={c.avatar} photoUrl={c.avatarUrl} size={46} />
               {c.online && <View style={styles.onlineDot} />}
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>

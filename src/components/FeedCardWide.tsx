@@ -96,7 +96,7 @@ export function FeedCardWide({
 
         <View style={styles.footer}>
           <PressableScale style={styles.author} onPress={() => onPressAuthor?.(listing)}>
-            <Avatar letter={listing.author.fullName[0] ?? "?"} size={26} />
+            <Avatar letter={listing.author.fullName[0] ?? "?"} photoUrl={listing.author.avatarUrl} size={26} />
             <Text style={styles.authorName}>{listing.author.fullName}</Text>
             {listing.author.verified && <Verified size={13} />}
             <TrustInline trust={listing.author.trustScore} dealsClosed={listing.author.dealsClosed} />

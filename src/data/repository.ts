@@ -75,6 +75,7 @@ function mapProfile(row: any, stats: ProfileStats): Profile {
   return {
     id: row.id,
     fullName: row.full_name,
+    avatarUrl: row.avatar_url ?? null,
     categories: (row.categories ?? []) as CategoryId[],
     hires: !!row.hires,
     yearsExp: row.years_exp ?? 0,
@@ -128,6 +129,7 @@ function mapListing(row: any, myId: string | null, stats: Record<string, Profile
     when: timeAgo(row.created_at),
     author: {
       fullName: row.author?.full_name ?? "—",
+      avatarUrl: row.author?.avatar_url ?? null,
       trustScore: s.trustScore,
       dealsClosed: s.dealsClosed,
       verified: !!row.author?.verified,
@@ -139,7 +141,8 @@ function mapListing(row: any, myId: string | null, stats: Record<string, Profile
   };
 }
 
-const LISTING_SELECT = "*, author:profiles(full_name,verified), applications(applicant_id)";
+const LISTING_SELECT =
+  "*, author:profiles(full_name,verified,avatar_url), applications(applicant_id)";
 
 // ---- Profile ----
 
@@ -184,6 +187,14 @@ export async function updateMyProfile(input: {
 // hirer completes with the name alone (hires = true).
 export function isProfileIncomplete(p: Profile): boolean {
   return p.fullName === "New worker" || (p.categories.length === 0 && !p.hires);
+}
+
+// Profile photo — the URL comes from the shared photo pipeline (yoinkr-photos
+// bucket, owner's folder).
+export async function setAvatar(url: string): Promise<void> {
+  const uid = await ensureUserId();
+  const { error } = await supabase.from("profiles").update({ avatar_url: url }).eq("id", uid);
+  if (error) throw error;
 }
 
 export async function setAvailability(available: boolean): Promise<Profile> {
@@ -351,7 +362,7 @@ export async function createListing(input: NewListing): Promise<Listing> {
 export async function getApplications(listingId: string): Promise<Application[]> {
   const { data, error } = await supabase
     .from("applications")
-    .select("*, applicant:profiles(full_name,categories,years_exp,verified)")
+    .select("*, applicant:profiles(full_name,categories,years_exp,verified,avatar_url)")
     .eq("listing_id", listingId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -370,6 +381,7 @@ export async function getApplications(listingId: string): Promise<Application[]>
       createdAt: a.created_at,
       applicant: {
         fullName: a.applicant?.full_name ?? "—",
+        avatarUrl: a.applicant?.avatar_url ?? null,
         categories: (a.applicant?.categories ?? []) as CategoryId[],
         yearsExp: a.applicant?.years_exp ?? 0,
         trustScore: s.trustScore,
@@ -420,7 +432,7 @@ export async function getPendingApplicationFrom(
 ): Promise<Application | undefined> {
   const { data, error } = await supabase
     .from("applications")
-    .select("*, applicant:profiles(full_name,categories,years_exp,verified)")
+    .select("*, applicant:profiles(full_name,categories,years_exp,verified,avatar_url)")
     .eq("listing_id", listingId)
     .eq("applicant_id", applicantId)
     .eq("status", "pending")
@@ -439,6 +451,7 @@ export async function getPendingApplicationFrom(
     createdAt: a.created_at,
     applicant: {
       fullName: a.applicant?.full_name ?? "—",
+      avatarUrl: a.applicant?.avatar_url ?? null,
       categories: (a.applicant?.categories ?? []) as CategoryId[],
       yearsExp: a.applicant?.years_exp ?? 0,
       trustScore: null,
@@ -606,7 +619,7 @@ export async function rateDeal(deal: Deal, stars: number, comment: string): Prom
 export async function getVouches(profileId: string): Promise<Vouch[]> {
   const { data, error } = await supabase
     .from("vouches")
-    .select("*, voucher:profiles!vouches_voucher_id_fkey(full_name,verified)")
+    .select("*, voucher:profiles!vouches_voucher_id_fkey(full_name,verified,avatar_url)")
     .eq("vouchee_id", profileId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -621,6 +634,7 @@ export async function getVouches(profileId: string): Promise<Vouch[]> {
     when: timeAgo(v.created_at),
     voucher: {
       fullName: v.voucher?.full_name ?? "—",
+      avatarUrl: v.voucher?.avatar_url ?? null,
       trustScore: (stats[v.voucher_id] ?? NO_STATS).trustScore,
       verified: !!v.voucher?.verified,
     },
@@ -691,8 +705,8 @@ export async function reportUser(
 // ---- Chat (Supabase + Realtime) ----
 
 const CONV_SELECT = `*,
-  a:profiles!conversations_participant_a_fkey(id,full_name),
-  b:profiles!conversations_participant_b_fkey(id,full_name),
+  a:profiles!conversations_participant_a_fkey(id,full_name,avatar_url),
+  b:profiles!conversations_participant_b_fkey(id,full_name,avatar_url),
   listing:listings(id,title,detail,pay_model,rate),
   messages(body,sender_id,created_at)`;
 
@@ -709,6 +723,7 @@ function mapChat(row: any, uid: string, stats: Record<string, ProfileStats>): Ch
     listingId: row.listing_id ?? null,
     name: other?.full_name ?? "—",
     avatar: (other?.full_name ?? "?")[0],
+    avatarUrl: other?.avatar_url ?? null,
     trust: (stats[other?.id] ?? NO_STATS).trustScore,
     lastMessage: last?.body ?? "Say hi 👋",
     when: last ? timeAgo(last.created_at) : timeAgo(row.created_at),

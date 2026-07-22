@@ -102,7 +102,7 @@ export default function ApplicantsScreen() {
                 style={styles.head}
                 onPress={() => router.push({ pathname: "/worker/[id]", params: { id: a.applicantId } })}
               >
-                <Avatar letter={a.applicant.fullName[0] ?? "?"} size={40} />
+                <Avatar letter={a.applicant.fullName[0] ?? "?"} photoUrl={a.applicant.avatarUrl} size={40} />
                 <View style={{ flex: 1 }}>
                   <View style={styles.nameRow}>
                     <Text style={styles.name}>{a.applicant.fullName}</Text>

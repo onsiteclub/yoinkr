@@ -90,7 +90,7 @@ export function FeedCard({
 
         <View style={styles.footer}>
           <PressableScale style={styles.author} onPress={() => onPressAuthor?.(listing)}>
-            <Avatar letter={listing.author.fullName[0] ?? "?"} size={30} />
+            <Avatar letter={listing.author.fullName[0] ?? "?"} photoUrl={listing.author.avatarUrl} size={30} />
             <View>
               <View style={styles.authorName}>
                 <Text style={styles.authorNameText}>{listing.author.fullName}</Text>
