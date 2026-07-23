@@ -60,6 +60,7 @@ export default function PostScreen() {
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [urgent, setUrgent] = useState(false);
+  const [partnership, setPartnership] = useState(false);
   const [saving, setSaving] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -93,6 +94,7 @@ export default function PostScreen() {
       setDescription(l.description);
       setLocation(l.location);
       setUrgent(l.urgent);
+      setPartnership(l.partnership);
       setPhotoUrl(l.photoUrl);
       setEditCity(l.city);
     });
@@ -201,6 +203,7 @@ export default function PostScreen() {
         city: editCity ?? city,
         location: location.trim() || "Ottawa area",
         urgent: type === "job" ? urgent : false,
+        partnership: type === "job" ? partnership : false,
         photoUrl,
       };
       if (isEdit && edit) await updateListing(edit, input);
@@ -416,6 +419,22 @@ export default function PostScreen() {
                 value={urgent}
                 onValueChange={setUrgent}
                 trackColor={{ true: colors.hazard, false: colors.line }}
+              />
+            </View>
+          )}
+
+          {/* Not hiring a helper — looking for a temporary partner (founder,
+              2026-07-23). Same deal cycle; the card reads PARTNER / Team up. */}
+          {type === "job" && (
+            <View style={styles.urgentRow}>
+              <View>
+                <Text style={styles.label}>Partnership</Text>
+                <Text style={styles.urgentHint}>Not a helper — a partner. You split work & pay.</Text>
+              </View>
+              <Switch
+                value={partnership}
+                onValueChange={setPartnership}
+                trackColor={{ true: colors.ink, false: colors.line }}
               />
             </View>
           )}

@@ -16,6 +16,7 @@ import type {
   Deal,
   Listing,
   ListingType,
+  Offer,
   PortfolioPhoto,
   Profile,
   Reference,
@@ -133,6 +134,7 @@ function mapListing(row: any, myId: string | null, stats: Record<string, Profile
     location: row.location,
     distanceKm: row.distance_km != null ? Number(row.distance_km) : undefined,
     urgent: !!row.urgent,
+    partnership: !!row.partnership,
     photoUrl: row.photo_url,
     status: row.status,
     createdAt: row.created_at,
@@ -348,6 +350,7 @@ export interface NewListing {
   city: string;
   location: string;
   urgent: boolean;
+  partnership: boolean;
   photoUrl: string | null;
 }
 
@@ -369,6 +372,7 @@ export async function createListing(input: NewListing): Promise<Listing> {
       city: input.city,
       location: input.location,
       urgent: input.urgent,
+      partnership: input.partnership,
       photo_url: input.photoUrl,
     })
     .select(LISTING_SELECT)
@@ -411,6 +415,7 @@ export async function updateListing(id: string, input: NewListing): Promise<List
       city: input.city,
       location: input.location,
       urgent: input.urgent,
+      partnership: input.partnership,
       photo_url: input.photoUrl,
     })
     .eq("id", id)
@@ -471,6 +476,102 @@ export async function applyToListing(
   });
   // 23505 = unique violation: already applied — treat as success (idempotent).
   if (error && error.code !== "23505") throw error;
+}
+
+// ---- Offers (hirer → worker, the reverse of a yoink) ----
+
+function mapOffer(row: any): Offer {
+  return {
+    id: row.id,
+    listingId: row.listing_id ?? null,
+    hirerId: row.hirer_id,
+    workerId: row.worker_id,
+    message: row.message ?? "",
+    proposedRate: row.proposed_rate ?? "",
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
+// Offer work straight to a profile (or to their 'available' ad). One pending
+// offer per pair — re-offering returns the existing one (23505 = the partial
+// unique index).
+export async function makeOffer(
+  workerId: string,
+  listingId: string | null,
+  message: string,
+  proposedRate: string
+): Promise<Offer> {
+  const uid = await ensureUserId();
+  const { data, error } = await supabase
+    .from("offers")
+    .insert({
+      listing_id: listingId,
+      hirer_id: uid,
+      worker_id: workerId,
+      message,
+      proposed_rate: proposedRate,
+    })
+    .select()
+    .single();
+  if (!error) return mapOffer(data);
+  if (error.code !== "23505") throw error;
+  const { data: existing, error: findErr } = await supabase
+    .from("offers")
+    .select("*")
+    .eq("hirer_id", uid)
+    .eq("worker_id", workerId)
+    .eq("status", "pending")
+    .single();
+  if (findErr) throw findErr;
+  return mapOffer(existing);
+}
+
+// Their pending offer to ME — feeds the in-chat accept bar (worker side).
+export async function getPendingOfferFrom(hirerId: string): Promise<Offer | undefined> {
+  const uid = await ensureUserId();
+  const { data, error } = await supabase
+    .from("offers")
+    .select("*")
+    .eq("hirer_id", hirerId)
+    .eq("worker_id", uid)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapOffer(data) : undefined;
+}
+
+// Accepting an offer is the worker's act — and what creates the deal
+// (application_id stays null; deals_insert lets either party insert).
+export async function acceptOffer(offer: Offer): Promise<Deal> {
+  const uid = await ensureUserId();
+  const { error: statusErr } = await supabase
+    .from("offers")
+    .update({ status: "accepted" })
+    .eq("id", offer.id);
+  if (statusErr) throw statusErr;
+  const { data, error } = await supabase
+    .from("deals")
+    .insert({
+      listing_id: offer.listingId,
+      application_id: null,
+      worker_id: uid,
+      hirer_id: offer.hirerId,
+      state: "agreed",
+      proposed_by: offer.hirerId,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapDeal(data);
+}
+
+export async function declineOffer(offerId: string): Promise<void> {
+  const { error } = await supabase
+    .from("offers")
+    .update({ status: "declined" })
+    .eq("id", offerId);
+  if (error) throw error;
 }
 
 // ---- Deals (accept → done → rate) ----
@@ -568,10 +669,16 @@ export async function declineApplication(applicationId: string): Promise<void> {
 }
 
 // The deal between me and `otherId` about `listingId` (chat banner lookup).
+// null listing = offer-born deal in a profile-to-profile conversation.
 // RLS already scopes deals to my own, so filtering by the other party is safe.
-export async function getDealWith(otherId: string, listingId: string): Promise<Deal | undefined> {
+export async function getDealWith(
+  otherId: string,
+  listingId: string | null
+): Promise<Deal | undefined> {
   await ensureUserId();
-  const { data, error } = await supabase.from("deals").select("*").eq("listing_id", listingId);
+  let q = supabase.from("deals").select("*");
+  q = listingId ? q.eq("listing_id", listingId) : q.is("listing_id", null);
+  const { data, error } = await q;
   if (error) throw error;
   const row = (data ?? []).find((d: any) => d.worker_id === otherId || d.hirer_id === otherId);
   return row ? mapDeal(row) : undefined;

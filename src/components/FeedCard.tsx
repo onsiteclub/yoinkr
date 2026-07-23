@@ -4,7 +4,7 @@ import { fonts } from "@/theme/fonts";
 import { categoryLabel } from "@/data/categories";
 import type { Listing } from "@/data/types";
 import { Avatar } from "./Avatar";
-import { TypeBadge, UrgentBadge } from "./Badge";
+import { PartnerBadge, TypeBadge, UrgentBadge } from "./Badge";
 import { LocationLine } from "./LocationLine";
 import { Placeholder } from "./Placeholder";
 import { PressableScale } from "./PressableScale";
@@ -38,7 +38,7 @@ export function FeedCard({
   else if (listing.type === "job" && listing.appliedByMe) {
     action = "Yoinked ✓";
     disabled = true;
-  } else if (listing.type === "job") action = "Yoink it";
+  } else if (listing.type === "job") action = listing.partnership ? "Team up" : "Yoink it";
   else if (listing.type === "available") action = "View profile";
   return (
     <View style={styles.card}>
@@ -58,6 +58,7 @@ export function FeedCard({
         >
           <View style={styles.photoBadges}>
             <TypeBadge type={listing.type} />
+            {listing.partnership && <PartnerBadge />}
             {listing.category && <CategoryTag category={listing.category} />}
             {listing.urgent && <UrgentBadge />}
           </View>
@@ -65,6 +66,7 @@ export function FeedCard({
       ) : (
         <View style={styles.noPhotoBadges}>
           <TypeBadge type={listing.type} />
+          {listing.partnership && <PartnerBadge />}
           {listing.category && <CategoryTag category={listing.category} />}
           {listing.urgent && <UrgentBadge />}
         </View>

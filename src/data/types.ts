@@ -49,6 +49,7 @@ export interface Listing {
   location: string; // neighbourhood within the city ("Kanata", "Nepean")
   distanceKm?: number; // distance from the viewer — decisive hiring factor.
   urgent: boolean;
+  partnership: boolean; // job framed as "we split work & pay" — same deal cycle
   photoUrl: string | null; // Supabase Storage path; null => category artwork
   // Lifecycle follows the deal (DB trigger): open → pending (deal agreed) →
   // closed (work done). Pending/closed ads stay visible with a status bar;
@@ -78,6 +79,20 @@ export interface Application {
     Profile,
     "fullName" | "avatarUrl" | "categories" | "yearsExp" | "trustScore" | "dealsClosed" | "verified"
   >;
+}
+
+// The reverse of an application: a hirer offers work straight to a worker
+// (from their profile or their 'available' ad). Worker accepts in chat →
+// deal is born with application_id null.
+export interface Offer {
+  id: string;
+  listingId: string | null;
+  hirerId: string;
+  workerId: string;
+  message: string;
+  proposedRate: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
 }
 
 // The Uber-style loop: accepting an application creates the deal ('agreed');

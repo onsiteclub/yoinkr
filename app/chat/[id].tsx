@@ -16,10 +16,13 @@ import { Avatar } from "@/components/Avatar";
 import { PressableScale } from "@/components/PressableScale";
 import {
   acceptApplication,
+  acceptOffer,
+  declineOffer,
   getChat,
   getDealWith,
   getMyRatingForDeal,
   getPendingApplicationFrom,
+  getPendingOfferFrom,
   getThread,
   markDealDone,
   markRead,
@@ -30,7 +33,7 @@ import {
 } from "@/data/repository";
 import { track } from "@/data/analytics";
 import { ensureUserId } from "@/data/supabase";
-import type { Application, ChatSummary, Deal, ThreadMessage } from "@/data/types";
+import type { Application, ChatSummary, Deal, Offer, ThreadMessage } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
 import { fonts } from "@/theme/fonts";
@@ -47,6 +50,8 @@ export default function ChatThreadScreen() {
   // Their pending yoink on my listing → in-chat accept bar (close the deal
   // right where the talking happens, without going back to the Crew screen).
   const [pendingApp, setPendingApp] = useState<Application | null>(null);
+  // Their pending direct offer to ME (hirer → worker, no job posted).
+  const [pendingOffer, setPendingOffer] = useState<Offer | null>(null);
   const [iRated, setIRated] = useState(false);
   const [ratingOpen, setRatingOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -66,14 +71,19 @@ export default function ChatThreadScreen() {
       if (cancelled || !c) return;
       setChat(c);
       track("chat_opened", { about_listing: !!c.listingId });
-      if (c.listingId && c.otherId) {
-        const d = await getDealWith(c.otherId, c.listingId);
+      if (c.otherId) {
+        const d = await getDealWith(c.otherId, c.listingId ?? null);
         if (!cancelled && d) {
           setDeal(d);
           setIRated(await getMyRatingForDeal(d.id));
         } else if (!cancelled) {
-          const app = await getPendingApplicationFrom(c.listingId, c.otherId);
-          if (!cancelled && app) setPendingApp(app);
+          if (c.listingId) {
+            const app = await getPendingApplicationFrom(c.listingId, c.otherId);
+            if (!cancelled && app) setPendingApp(app);
+          }
+          // Direct offers ride on the conversation, listing or not.
+          const offer = await getPendingOfferFrom(c.otherId).catch(() => undefined);
+          if (!cancelled && offer) setPendingOffer(offer);
         }
       }
       const thread = await getThread(c.conversationId);
@@ -108,6 +118,24 @@ export default function ChatThreadScreen() {
     // Tell the other side right here, in realtime.
     const msg = await sendMessage(chat.conversationId, "✅ Accepted your yoink — deal on. Let's line up the details.");
     setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+  };
+
+  // Worker side: accepting their direct offer is what creates the deal.
+  const onAcceptOffer = async () => {
+    if (!pendingOffer || !chat) return;
+    const d = await acceptOffer(pendingOffer);
+    track("accept", { where: "chat_offer" });
+    setDeal(d);
+    setPendingOffer(null);
+    const msg = await sendMessage(chat.conversationId, "✅ Accepted your offer — deal on. Let's line up the details.");
+    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+  };
+
+  const onDeclineOffer = async () => {
+    if (!pendingOffer) return;
+    await declineOffer(pendingOffer.id);
+    track("decline", { where: "chat_offer" });
+    setPendingOffer(null);
   };
 
   const onMarkDone = async () => {
@@ -205,6 +233,37 @@ export default function ChatThreadScreen() {
           )}
         </View>
       )}
+      {/* offer-born deals may have no listing — the lifecycle bar still needs
+          a home, or Mark done / Rate would be unreachable */}
+      {!chat.jobContext && deal && (
+        <View style={styles.jobBar}>
+          <Text style={{ fontSize: 18 }}>🤝</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.jobTitle}>Direct deal with {chat.name}</Text>
+            <Text style={styles.jobPay}>agreed here in chat</Text>
+          </View>
+          {deal.state === "agreed" && (
+            <PressableScale style={styles.closeDeal} onPress={onMarkDone}>
+              <Text style={styles.closeDealText}>Mark done</Text>
+            </PressableScale>
+          )}
+          {deal.state === "done" && !iRated && (
+            <PressableScale style={styles.closeDeal} onPress={() => setRatingOpen(true)}>
+              <Text style={styles.closeDealText}>Rate ★</Text>
+            </PressableScale>
+          )}
+          {deal.state === "done" && iRated && (
+            <View style={[styles.closeDeal, styles.closeDealMuted]}>
+              <Text style={styles.closeDealMutedText}>Rated ✓ waiting</Text>
+            </View>
+          )}
+          {deal.state === "rated" && (
+            <View style={[styles.closeDeal, styles.closeDealMuted]}>
+              <Text style={styles.closeDealMutedText}>Rated ★</Text>
+            </View>
+          )}
+        </View>
+      )}
       {deal && deal.state !== "agreed" && (
         <PressableScale onPress={() => setReportOpen(true)} style={styles.reportRow}>
           <Text style={styles.reportText}>Problem with payment? Report it — we review every case.</Text>
@@ -271,6 +330,24 @@ export default function ChatThreadScreen() {
               </Text>
             </View>
             <PressableScale style={styles.acceptBtn} onPress={onAcceptInChat}>
+              <Text style={styles.acceptBtnText}>Accept</Text>
+            </PressableScale>
+          </View>
+        )}
+
+        {/* their direct offer to me (worker side) — accept births the deal */}
+        {!deal && !pendingApp && pendingOffer && (
+          <View style={styles.acceptBar}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.acceptBarTitle}>🤝 {chat.name} offered you work</Text>
+              <Text style={styles.acceptBarSub}>
+                {pendingOffer.proposedRate ? `Offered: ${pendingOffer.proposedRate}` : "Take it and the deal is on"}
+              </Text>
+            </View>
+            <PressableScale style={styles.declineBtn} onPress={onDeclineOffer}>
+              <Text style={styles.declineBtnText}>Decline</Text>
+            </PressableScale>
+            <PressableScale style={styles.acceptBtn} onPress={onAcceptOffer}>
               <Text style={styles.acceptBtnText}>Accept</Text>
             </PressableScale>
           </View>
@@ -536,6 +613,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   acceptBtnText: { color: colors.white, fontSize: 13, fontWeight: "800" },
+  declineBtn: {
+    borderWidth: 1,
+    borderColor: colors.goodLine,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  declineBtnText: { color: "#3c7a5a", fontSize: 13, fontWeight: "700" },
   bubbleWrap: { maxWidth: "78%" },
   bubble: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 13 },
   bubbleMe: { backgroundColor: colors.accentTint, borderBottomRightRadius: 3 },

@@ -17,6 +17,15 @@ export function TypeBadge({ type }: { type: ListingType }) {
   );
 }
 
+// A job framed as a temporary partnership — split work, split pay.
+export function PartnerBadge() {
+  return (
+    <View style={[styles.badge, { backgroundColor: colors.ink }]}>
+      <Text style={[styles.text, { color: colors.white }]}>🤝 PARTNER</Text>
+    </View>
+  );
+}
+
 export function UrgentBadge() {
   return (
     <View style={[styles.badge, { backgroundColor: colors.hazard }]}>

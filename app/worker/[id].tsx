@@ -17,7 +17,9 @@ import {
   getReferences,
   getVouches,
   haveIVouched,
+  makeOffer,
   removeVouch,
+  sendMessage,
 } from "@/data/repository";
 import { track } from "@/data/analytics";
 import { currentUserId } from "@/data/supabase";
@@ -42,6 +44,7 @@ export default function WorkerProfileScreen() {
   const [myVouch, setMyVouch] = useState(false);
   const [isMe, setIsMe] = useState(false);
   const [vouchOpen, setVouchOpen] = useState(false);
+  const [offerOpen, setOfferOpen] = useState(false);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -73,6 +76,18 @@ export default function WorkerProfileScreen() {
   const onUnvouch = async () => {
     await removeVouch(profile.id);
     load();
+  };
+
+  // Direct hire, no job posted: the offer + its pitch land in the chat (the
+  // worker gets the accept bar there) — FB Marketplace flow, reversed.
+  const onOffer = async (message: string, rate: string) => {
+    await makeOffer(profile.id, null, message, rate);
+    track("offer_sent", { with_rate: !!rate });
+    setOfferOpen(false);
+    const convId = await getOrCreateConversation(profile.id, null);
+    const rateLine = rate ? `\nOffered rate: ${rate}` : "";
+    await sendMessage(convId, `🤝 ${message}${rateLine}`);
+    router.push({ pathname: "/chat/[id]", params: { id: convId } });
   };
 
   return (
@@ -141,6 +156,21 @@ export default function WorkerProfileScreen() {
               </Text>
             </PressableScale>
           </View>
+        )}
+
+        {/* direct hire — works with or without an ad from this worker */}
+        {!isMe && profile.categories.length > 0 && (
+          <PressableScale
+            style={styles.offerBtn}
+            onPress={async () => {
+              if (!(await requireAccount())) return;
+              setOfferOpen(true);
+            }}
+          >
+            <Text style={styles.offerBtnText}>
+              🤝 Offer work to {profile.publicName.split(" ")[0]}
+            </Text>
+          </PressableScale>
         )}
 
         {/* photos first — the eye decides here (redesign 2026-07-23) */}
@@ -218,7 +248,66 @@ export default function WorkerProfileScreen() {
         onClose={() => setVouchOpen(false)}
         onSubmit={onVouch}
       />
+
+      <OfferModal
+        visible={offerOpen}
+        name={profile.publicName.split(" ")[0]}
+        onClose={() => setOfferOpen(false)}
+        onSubmit={onOffer}
+      />
     </View>
+  );
+}
+
+// Direct offer: what + optional rate. The worker accepts in chat → deal.
+function OfferModal({
+  visible,
+  name,
+  onClose,
+  onSubmit,
+}: {
+  visible: boolean;
+  name: string;
+  onClose: () => void;
+  onSubmit: (message: string, rate: string) => void;
+}) {
+  const [message, setMessage] = useState("");
+  const [rate, setRate] = useState("");
+  const canSend = message.trim().length > 0;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Offer work to {name}</Text>
+          <Text style={styles.modalHint}>
+            Say what the job is — {name} accepts right in the chat and the deal is on.
+          </Text>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Framing help in Kanata, ~3 days starting Monday…"
+            placeholderTextColor={colors.inkLo}
+            value={message}
+            onChangeText={setMessage}
+            multiline
+          />
+          <TextInput
+            style={[styles.modalInput, { minHeight: 0 }]}
+            placeholder="Rate — $34/hr, $2/sqft… (optional)"
+            placeholderTextColor={colors.inkLo}
+            value={rate}
+            onChangeText={setRate}
+          />
+          <PressableScale
+            style={[styles.modalBtn, { opacity: canSend ? 1 : 0.5 }]}
+            disabled={!canSend}
+            onPress={() => canSend && onSubmit(message.trim(), rate.trim())}
+          >
+            <Text style={styles.modalBtnText}>Send offer</Text>
+          </PressableScale>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -358,6 +447,17 @@ const styles = StyleSheet.create({
   vouchBtnText: { color: colors.safetyInk, fontFamily: fonts.display, fontSize: 14.5 },
   vouchBtnDone: { backgroundColor: colors.goodBg, borderColor: colors.goodLine },
   vouchBtnTextDone: { color: colors.good },
+  offerBtn: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  offerBtnText: { color: colors.ink, fontFamily: fonts.bodySemi, fontSize: 13.5 },
   sectionTitle: {
     fontFamily: fonts.display,
     fontSize: 13,
