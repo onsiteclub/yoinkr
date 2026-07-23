@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LogoMark } from "@/components/Logo";
 import { PressableScale } from "@/components/PressableScale";
+import { track } from "@/data/analytics";
 import { CATEGORIES, type CategoryId, allowsPiecework } from "@/data/categories";
 import { getMyProfile, updateMyProfile } from "@/data/repository";
 import { hasAccount } from "@/data/supabase";
@@ -35,6 +36,7 @@ export default function SetupScreen() {
   const insets = useSafeAreaInsets();
   const [role, setRole] = useState<Role | null>(null);
   const [name, setName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [categories, setCategories] = useState<CategoryId[]>([]);
   const [years, setYears] = useState("");
   const [acceptsHourly, setAcceptsHourly] = useState(true);
@@ -50,6 +52,7 @@ export default function SetupScreen() {
     getMyProfile()
       .then((p) => {
         if (p.fullName !== "New worker") setName(p.fullName);
+        if (p.nickname) setNickname(p.nickname);
         setCategories(p.categories);
         if (p.categories.length > 0 && p.hires) setRole("both");
         else if (p.hires) setRole("hiring");
@@ -84,6 +87,7 @@ export default function SetupScreen() {
     try {
       await updateMyProfile({
         fullName: name.trim(),
+        nickname: nickname.trim() || null,
         categories: worksToo ? categories : [],
         hires: role !== "working",
         yearsExp: Math.max(0, parseInt(years, 10) || 0),
@@ -91,6 +95,7 @@ export default function SetupScreen() {
         acceptsPiecework: acceptsPiecework && canPiecework,
         crewSize,
       });
+      track("setup_saved", { role, categories: categories.length, nickname: !!nickname.trim() });
       router.back();
     } finally {
       setSaving(false);
@@ -147,6 +152,23 @@ export default function SetupScreen() {
                 onChangeText={setName}
                 autoCapitalize="words"
               />
+
+              {/* Optional public alias — plenty of people don't want their
+                  real name (or email) visible in a public feed. */}
+              <Text style={[styles.label, { marginTop: 18 }]}>Nickname — optional</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Frenchy"
+                placeholderTextColor={colors.tertiary}
+                value={nickname}
+                onChangeText={setNickname}
+                autoCapitalize="words"
+                maxLength={30}
+              />
+              <Text style={styles.hint}>
+                Shown instead of your name everywhere public — feed, ads and chat. Leave it
+                empty to show your name.
+              </Text>
             </>
           )}
 

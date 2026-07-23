@@ -83,16 +83,12 @@ export function FeedCardWide({
           <LocationLine listing={listing} size={13.5} />
         </View>
 
+        {/* Density cut (2026-07-22): description stays off the card — it
+            lives on the ad's own screens. */}
         <Text style={styles.meta}>
           {listing.when}
           {listing.detail ? `  ·  ${listing.detail}` : ""}
         </Text>
-
-        {!!listing.description && (
-          <Text numberOfLines={2} style={styles.desc}>
-            {listing.description}
-          </Text>
-        )}
 
         <View style={styles.footer}>
           <PressableScale style={styles.author} onPress={() => onPressAuthor?.(listing)}>
@@ -122,7 +118,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 16,
-    marginBottom: 14,
+    // Match the mobile card's looser rhythm — rows were visually fusing.
+    marginBottom: 18,
     overflow: "hidden",
   },
   lifeBar: { paddingVertical: 6, alignItems: "center" },
@@ -147,7 +144,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 16.5, fontFamily: fonts.bodyBold, color: colors.inkBrand, lineHeight: 22, marginTop: 6 },
   locationRow: { marginTop: 6 },
   meta: { fontSize: 12.5, color: colors.tertiary, marginTop: 4 },
-  desc: { fontSize: 12.5, color: colors.secondary, lineHeight: 17, marginTop: 6 },
   footer: {
     flexDirection: "row",
     alignItems: "center",

@@ -23,6 +23,7 @@ import {
   haveIVouched,
   removeVouch,
 } from "@/data/repository";
+import { track } from "@/data/analytics";
 import { currentUserId } from "@/data/supabase";
 import { requireAccount } from "@/lib/gate";
 import type { PortfolioPhoto, Profile, Reference, Vouch } from "@/data/types";
@@ -48,6 +49,7 @@ export default function WorkerProfileScreen() {
 
   const load = useCallback(() => {
     if (!id) return;
+    track("worker_profile_view");
     getProfile(id).then(setProfile);
     getPortfolio(id).then(setPortfolio);
     getReferences(id).then(setReferences);
@@ -99,10 +101,10 @@ export default function WorkerProfileScreen() {
       >
         {/* identity */}
         <View style={styles.identity}>
-          <Avatar letter={profile.fullName[0] ?? "?"} photoUrl={profile.avatarUrl} size={66} />
+          <Avatar letter={profile.publicName[0] ?? "?"} photoUrl={profile.avatarUrl} size={66} />
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
-              <Text style={styles.name}>{profile.fullName}</Text>
+              <Text style={styles.name}>{profile.publicName}</Text>
               {profile.verified && <Verified />}
             </View>
             <Text style={styles.trade}>
@@ -156,7 +158,7 @@ export default function WorkerProfileScreen() {
                 router.push({ pathname: "/chat/[id]", params: { id: convId } });
               }}
             >
-              <Text style={styles.messageText}>Message {profile.fullName.split(" ")[0]}</Text>
+              <Text style={styles.messageText}>Message {profile.publicName.split(" ")[0]}</Text>
             </PressableScale>
             <PressableScale
               style={[styles.vouchBtn, myVouch && styles.vouchBtnDone]}
@@ -238,7 +240,7 @@ export default function WorkerProfileScreen() {
             </View>
             {portfolio.length === 0 && artCategory && (
               <Text style={styles.sampleNote}>
-                Sample {categoryLabel(artCategory)} images — {profile.fullName.split(" ")[0]} hasn’t
+                Sample {categoryLabel(artCategory)} images — {profile.publicName.split(" ")[0]} hasn’t
                 added work photos yet.
               </Text>
             )}
@@ -248,7 +250,7 @@ export default function WorkerProfileScreen() {
 
       <VouchModal
         visible={vouchOpen}
-        name={profile.fullName.split(" ")[0]}
+        name={profile.publicName.split(" ")[0]}
         categories={profile.categories.length > 0 ? profile.categories : CATEGORIES.map((c) => c.id)}
         onClose={() => setVouchOpen(false)}
         onSubmit={onVouch}

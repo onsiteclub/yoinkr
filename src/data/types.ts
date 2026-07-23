@@ -11,6 +11,8 @@ export type ListingType = "job" | "tool" | "available";
 export interface Profile {
   id: string;
   fullName: string;
+  nickname: string | null; // optional public alias — many don't want the real name out
+  publicName: string; // what the app shows everywhere: nickname, else fullName
   avatarUrl: string | null; // profile photo; null → initial-letter fallback
   categories: CategoryId[]; // what they do — empty for hirer-only profiles
   hires: boolean; // posts jobs / takes crews — true for contractors
@@ -40,7 +42,8 @@ export interface Listing {
   crewSize: number; // crew needed (jobs) / crew offered (workers)
   pay: string; // display string composed from payModel + rate
   title: string;
-  detail: string; // short extra ("weekend", "1 day", "used, 2 batteries")
+  detail: string; // display meta line composed by the repository (sqft · duo · rawDetail)
+  rawDetail: string; // the stored short extra alone ("weekend") — edit-form prefill
   description: string; // long body — scope/schedule on jobs, pitch on offers
   city: string; // region gate — Ottawa only at launch
   location: string; // neighbourhood within the city ("Kanata", "Nepean")

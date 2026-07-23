@@ -113,3 +113,31 @@ export async function requestPasswordReset(email: string): Promise<void> {
   const { error } = await supabase.auth.resetPasswordForEmail(email);
   if (error) throw error;
 }
+
+// ---- optional email verification (verified badge) ----
+// Autoconfirm is on for the tester phase, so GoTrue never proves the email at
+// signup. Proving ownership later is an OTP round-trip: we email a 6-digit
+// code (signInWithOtp on the already-existing account) and the person types
+// it back. verifyOtp succeeding IS the proof — then the profile gets its
+// verified badge (repository.markVerified). Non-blocking by design: skipping
+// this changes nothing about what the account can do.
+// NOTE: the Magic Link email template on onsite-core must include {{ .Token }}
+// so the code is visible in the email (one-line dashboard change).
+
+export async function currentUserEmail(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.email ?? null;
+}
+
+export async function sendVerifyCode(email: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: false },
+  });
+  if (error) throw error;
+}
+
+export async function confirmVerifyCode(email: string, token: string): Promise<void> {
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+  if (error) throw error;
+}

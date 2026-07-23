@@ -12,7 +12,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "@/components/PressableScale";
 import { TrustInline } from "@/components/TrustInline";
-import { applyToListing, getListing } from "@/data/repository";
+import { track } from "@/data/analytics";
+import {
+  applyToListing,
+  getListing,
+  getOrCreateConversation,
+  sendMessage,
+} from "@/data/repository";
 import { hasAccount } from "@/data/supabase";
 import type { Listing } from "@/data/types";
 import { colors } from "@/theme/colors";
@@ -39,11 +45,23 @@ export default function ApplyScreen() {
   const isOpen = listing?.status === "open";
   const canSend = message.trim().length > 0 && !saving && isOpen;
 
+  // A yoink is also the first message (FB Marketplace model): the proposal
+  // opens the conversation about this listing, so it shows up in the Messages
+  // tab for BOTH sides immediately — no silent applications.
   const submit = async () => {
     if (!canSend || !listing) return;
     setSaving(true);
-    await applyToListing(listing.id, message.trim(), rate.trim());
-    router.back();
+    try {
+      const text = message.trim();
+      const rateLine = rate.trim() ? `\nMy rate: ${rate.trim()}` : "";
+      await applyToListing(listing.id, text, rate.trim());
+      const convId = await getOrCreateConversation(listing.authorId, listing.id);
+      await sendMessage(convId, `🪝 ${text}${rateLine}`);
+      track("yoink_sent", { listing: listing.id, with_rate: !!rate.trim() });
+      router.replace({ pathname: "/chat/[id]", params: { id: convId } });
+    } catch {
+      setSaving(false);
+    }
   };
 
   if (!listing) return <View style={styles.screen} />;

@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -12,9 +12,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Placeholder } from "@/components/Placeholder";
+import { HiringGlyph, WorkGlyph } from "@/components/PostChoiceIcons";
+import { track } from "@/data/analytics";
 import { PressableScale } from "@/components/PressableScale";
 import { pickAndUploadPhoto } from "@/data/photos";
-import { createListing, getMyProfile } from "@/data/repository";
+import { createListing, getListing, getMyProfile, updateListing } from "@/data/repository";
 import { hasAccount, supabase } from "@/data/supabase";
 import {
   CATEGORIES,
@@ -43,6 +45,10 @@ const FORM_TITLES: Record<ListingType, string> = {
 export default function PostScreen() {
   const insets = useSafeAreaInsets();
   const city = useRegion((s) => s.city);
+  // ?edit=<listingId> → same form, prefilled, saving via updateListing.
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const isEdit = !!edit;
+  const [editCity, setEditCity] = useState<string | null>(null);
   const [type, setType] = useState<ListingType | null>(null); // null = chooser step
   const [category, setCategory] = useState<CategoryId>("framing");
   const [payModel, setPayModel] = useState<PayModel>("hourly");
@@ -69,6 +75,28 @@ export default function PostScreen() {
       if (!ok) router.replace({ pathname: "/welcome", params: { gate: "1" } });
     });
   }, []);
+
+  // Edit mode: load my ad and prefill every field (skips the chooser step).
+  // RLS only lets the author save, so a foreign id just fails on submit.
+  useEffect(() => {
+    if (!edit) return;
+    getListing(edit).then((l) => {
+      if (!l) return;
+      setType(l.type);
+      if (l.category) setCategory(l.category);
+      if (l.payModel) setPayModel(l.payModel);
+      setRate(l.rate != null ? String(l.rate) : "");
+      setSqft(l.sqft != null ? String(l.sqft) : "");
+      setCrewSize(l.crewSize);
+      setTitle(l.title);
+      setDetail(l.rawDetail);
+      setDescription(l.description);
+      setLocation(l.location);
+      setUrgent(l.urgent);
+      setPhotoUrl(l.photoUrl);
+      setEditCity(l.city);
+    });
+  }, [edit]);
 
   const isTool = type === "tool";
   const effectiveModel: PayModel = isTool ? "fixed" : payModel;
@@ -159,23 +187,40 @@ export default function PostScreen() {
   const submit = async () => {
     if (!canPost || type === null) return;
     setSaving(true);
-    await createListing({
-      type,
-      category: isTool ? null : category,
-      payModel: effectiveModel,
-      rate: rateNum,
-      sqft: Number.isFinite(sqftNum) && sqftNum > 0 ? sqftNum : null,
-      crewSize: isTool ? 1 : crewSize,
-      title: title.trim(),
-      detail: detail.trim(),
-      description: description.trim(),
-      city,
-      location: location.trim() || "Ottawa area",
-      urgent: type === "job" ? urgent : false,
-      photoUrl,
-    });
-    router.back();
+    try {
+      const input = {
+        type,
+        category: isTool ? null : category,
+        payModel: effectiveModel,
+        rate: rateNum,
+        sqft: Number.isFinite(sqftNum) && sqftNum > 0 ? sqftNum : null,
+        crewSize: isTool ? 1 : crewSize,
+        title: title.trim(),
+        detail: detail.trim(),
+        description: description.trim(),
+        city: editCity ?? city,
+        location: location.trim() || "Ottawa area",
+        urgent: type === "job" ? urgent : false,
+        photoUrl,
+      };
+      if (isEdit && edit) await updateListing(edit, input);
+      else await createListing(input);
+      track(isEdit ? "post_edited" : "post_published", {
+        type,
+        category: input.category,
+        pay_model: input.payModel,
+        with_photo: !!photoUrl,
+      });
+      router.back();
+    } catch {
+      setSaving(false);
+    }
   };
+
+  // Edit mode has no chooser — blank until the listing prefill lands.
+  if (isEdit && type === null) {
+    return <View style={[styles.screen, { paddingTop: insets.top }]} />;
+  }
 
   // ---- step 1: what are you posting? ----
   if (type === null) {
@@ -191,7 +236,9 @@ export default function PostScreen() {
 
         <View style={styles.chooser}>
           <PressableScale style={styles.chooseCard} onPress={() => chooseType("job")}>
-            <Text style={styles.chooseEmoji}>🏗️</Text>
+            <View style={styles.chooseIcon}>
+              <HiringGlyph size={30} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.chooseTitle}>I'm hiring</Text>
               <Text style={styles.chooseBody}>
@@ -202,7 +249,9 @@ export default function PostScreen() {
           </PressableScale>
 
           <PressableScale style={styles.chooseCard} onPress={() => chooseType("available")}>
-            <Text style={styles.chooseEmoji}>👷</Text>
+            <View style={styles.chooseIcon}>
+              <WorkGlyph size={30} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.chooseTitle}>I want work</Text>
               <Text style={styles.chooseBody}>
@@ -224,12 +273,14 @@ export default function PostScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <PressableScale onPress={() => setType(null)} hitSlop={10}>
+        <PressableScale onPress={() => (isEdit ? router.back() : setType(null))} hitSlop={10}>
           <Text style={styles.back}>‹</Text>
         </PressableScale>
-        <Text style={styles.headerTitle}>{FORM_TITLES[type]}</Text>
+        <Text style={styles.headerTitle}>{isEdit ? "Edit your ad" : FORM_TITLES[type]}</Text>
         <PressableScale onPress={submit} hitSlop={10} disabled={!canPost}>
-          <Text style={[styles.post, { color: canPost ? colors.ink : colors.inkLo }]}>Post</Text>
+          <Text style={[styles.post, { color: canPost ? colors.ink : colors.inkLo }]}>
+            {isEdit ? "Save" : "Post"}
+          </Text>
         </PressableScale>
       </View>
 
@@ -398,7 +449,7 @@ export default function PostScreen() {
             disabled={!canPost}
             style={[styles.submitBtn, { opacity: canPost ? 1 : 0.5 }]}
           >
-            <Text style={styles.submitText}>{FORM_TITLES[type]}</Text>
+            <Text style={styles.submitText}>{isEdit ? "Save changes" : FORM_TITLES[type]}</Text>
           </PressableScale>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -467,7 +518,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
   },
-  chooseEmoji: { fontSize: 30 },
+  chooseIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 15,
+    backgroundColor: colors.accentTint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   chooseTitle: { fontSize: 16.5, fontWeight: "800", color: colors.ink },
   chooseBody: { fontSize: 12.5, color: colors.inkMid, lineHeight: 17, marginTop: 3 },
   chooseArrow: { fontSize: 26, color: colors.inkLo },

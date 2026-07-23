@@ -4,6 +4,33 @@ Data: 2026-07-18 · Substitui o diagnóstico de 2026-07-09 (visão multi-trade, 
 
 ---
 
+## Backlog de correções (FEITO 2026-07-22) — para ligar
+
+Sete itens do backlog do founder implementados (`tsc` limpo). **Passos do founder, nesta ordem:**
+
+1. ~~Aplicar a migration `20260722100000_yoinkr_profile_nickname.sql`~~ **FEITO 2026-07-22** (push autorizado pelo founder; verificado vivo — select de `nickname` e o join do feed respondem 200).
+2. ~~Template "Magic Link" precisa de SMTP próprio~~ **FEITO 2026-07-22** (via Management API, autorizado pelo founder): o onsite-core agora envia auth email por SMTP do Resend (`smtp.resend.com:465`, conta que o onsite-shop já usava, remetente `Onsite <contact@onsiteclub.ca>` — domínio já verificado), e o template Magic Link tem o código `{{ .Token }}` + link de fallback (subject "Your sign-in code"). Vale para o projeto compartilhado inteiro: TODOS os auth emails da holding (recovery, magic link) saem por aí agora — upgrade sobre o mailer embutido (limite de 2/h). `mailer_autoconfirm` continua ligado. Falta só o teste vivo: Profile → "Get the verified badge" → "Email me the code".
+
+O que entrou:
+
+- **Meus Anúncios + edição**: `/my-ads` (link no Profile) lista tudo que postei com status; tocar abre `/post?edit=<id>` — o mesmo form, prefilled, salvando via `updateListing` (RLS `listings_update` já permitia; faltava só o app). "Edit" no card do feed agora abre o anúncio certo (antes abria form em branco).
+- **Yoink → chat (modelo FB Marketplace)**: yoinkar cria/abre a conversa do anúncio e manda a proposta como primeira mensagem — aparece na Tab Message dos dois lados; a Tab Message também escuta Realtime (`subscribeToInbox`) enquanto aberta.
+- **Cards do feed**: descrição saiu do card (vive nas telas do anúncio), espaçamento 11→18.
+- **Ad slots**: `AdSlot` genérico + `houseAds.ts` (shop OnSite, InvoicePass, Timekeeper), 1 a cada 3 posts, rotação por slot. Anunciante real depois = trocar a fonte em `houseAds.ts`; feed não muda.
+- **Verificação opcional de email**: card no Profile → `/verify` → código OTP → `verified=true` (badge ✓ + recovery confiável). Não bloqueia nada; autoconfirm continua ligado. *Nota: `verified` é gravado pelo client (a RLS de update de perfil já permitia — buraco pré-existente); endurecer com trigger server-side antes do lançamento. Email "conta criada" no signup precisa de SMTP próprio/edge function — não feito.*
+- **Nickname**: campo no setup; quando setado é o nome público em feed/chat/anúncios/vouches (`publicName`); o nome real fica só na edição.
+- **Ícones do "+"**: emojis 🏗️/👷 → SVGs da marca (`PostChoiceIcons.tsx`, megafone/capacete, Char + Site Orange).
+
+---
+
+## Modo teste com bots + telemetria (FEITO 2026-07-22)
+
+Fase de testers reais aberta. Tudo documentado em **TESTING.md** (coleta, purga, aviso ao tester). Resumo:
+
+- **Telemetria**: `analytics.events` exposto no PostgREST e instrumentado no app (20 eventos de jornada, fire-and-forget, client só escreve). Descarte: `delete from analytics.events where app='yoinkr'`.
+- **Frota de bots (blind test)**: 5 personas (3 workers, 2 hirers) + 4 anúncios; quem é bot só existe em `yoinkr.bots` (sem policy de leitura). Triggers pg_net → edge functions `bot-reply` (responde na persona, aceita yoink quando a conversa fecha) e `bot-engage` (engaja anúncio novo de humano; avalia deal done). Migration `20260722120000_yoinkr_bot_fleet.sql` aplicada; functions deployadas; smoke test vivo OK (Junior Silva yoinkou o job real de strapping com contra-proposta).
+- **Purga da frota**: `delete from auth.users where email like '%@bot.yoinkr.test'`.
+
 ## A visão (decidida pelo founder, 2026-07-18)
 
 "LinkedIn + Uber, específico para framing." Ottawa, só framing — o UX diz isso, sem rótulo.
@@ -30,7 +57,7 @@ Tudo tipado e `tsc --noEmit` limpo. Anon-auth, chat Realtime, fotos e navegaçã
 1. **Aplicar a migration** `20260718100000_yoinkr_framing_pivot.sql` (já escrita em `onsite-core-db`):
    `cd c:\Dev\onsite-core-db` → `npx supabase login` (ou `$env:SUPABASE_DB_PASSWORD="…"`) → `npx supabase db push`
    *(sem ela o app quebra: o client já espera `categories`/`pay_model`/`profile_stats`)*
-2. **Reseedar:** `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/seed_yoinkr.mjs` (seed novo já no shape do pivô, com vouches e 3+ ratings).
+2. ~~Reseedar~~ **SEED PURGADO 2026-07-22** (pedido do founder): os 5 usuários `*@seed.yoinkr.test` foram deletados via SQL (cascade levou 6 listings, ratings, vouches, portfólio e 1 application). Restaram só as 2 contas reais e seus 2 anúncios. O script `scripts/seed_yoinkr.mjs` continua no repo se um dia quiser demo data de volta.
 3. Smoke test em dois devices: post job → yoink → accept → chat → mark done → rate dos dois lados → conferir reveal + média.
 
 ## Moderação de chat (FEITO 2026-07-21, testado e2e)

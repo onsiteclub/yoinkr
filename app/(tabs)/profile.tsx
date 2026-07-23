@@ -97,16 +97,17 @@ export default function ProfileScreen() {
         {/* identity — tap the avatar to set a profile photo */}
         <View style={styles.identity}>
           <PressableScale onPress={onChangeAvatar} hitSlop={6}>
-            <Avatar letter={me.fullName[0] ?? "?"} photoUrl={me.avatarUrl} size={66} />
+            <Avatar letter={me.publicName[0] ?? "?"} photoUrl={me.avatarUrl} size={66} />
             <View style={styles.avatarBadge}>
               <Text style={styles.avatarBadgeText}>📷</Text>
             </View>
           </PressableScale>
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
-              <Text style={styles.name}>{me.fullName}</Text>
+              <Text style={styles.name}>{me.publicName}</Text>
               {me.verified && <Verified />}
             </View>
+            {me.nickname && <Text style={styles.realName}>{me.fullName}</Text>}
             <Text style={styles.trade}>
               {roleLabel(me.categories, me.hires) || "Set up your profile"}
               {me.crewSize === 2 && me.categories.length > 0 ? " · duo" : ""}
@@ -117,6 +118,31 @@ export default function ProfileScreen() {
             <Text style={styles.editLink}>Edit</Text>
           </PressableScale>
         </View>
+
+        {/* my ads — where everything I posted lives (edit from there) */}
+        <PressableScale style={styles.myAdsRow} onPress={() => router.push("/my-ads")}>
+          <Text style={styles.myAdsIcon}>▤</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.myAdsTitle}>My ads</Text>
+            <Text style={styles.myAdsBody}>See and edit everything you posted</Text>
+          </View>
+          <Text style={styles.myAdsArrow}>›</Text>
+        </PressableScale>
+
+        {/* optional email verification — badge + account recovery, never a gate */}
+        {!me.verified && (
+          <PressableScale style={styles.verifyRow} onPress={() => router.push("/verify")}>
+            <Verified size={18} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.verifyTitle}>Get the verified badge</Text>
+              <Text style={styles.verifyBody}>
+                Confirm your email when you can — it unlocks account recovery and puts a ✓ on
+                your name. Optional, takes a minute.
+              </Text>
+            </View>
+            <Text style={styles.myAdsArrow}>›</Text>
+          </PressableScale>
+        )}
 
         {/* trust badge — the avg only exists at 3+ ratings (server rule) */}
         <View style={styles.trustBadge}>
@@ -240,6 +266,39 @@ const styles = StyleSheet.create({
   },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   name: { fontSize: 20, fontWeight: "700", color: colors.ink },
+  realName: { fontSize: 11.5, color: colors.inkLo, marginTop: 1 },
+  myAdsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 14,
+    marginTop: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  myAdsIcon: { fontSize: 20, color: colors.accentDark },
+  myAdsTitle: { fontSize: 13.5, fontWeight: "700", color: colors.ink },
+  myAdsBody: { fontSize: 11.5, color: colors.inkMid, marginTop: 1 },
+  myAdsArrow: { fontSize: 22, color: colors.inkLo },
+  verifyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 14,
+    marginTop: 10,
+    backgroundColor: colors.goodBg,
+    borderWidth: 1,
+    borderColor: colors.goodLine,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  verifyTitle: { fontSize: 13.5, fontWeight: "700", color: "#0a6b41" },
+  verifyBody: { fontSize: 11.5, color: "#3c7a5a", marginTop: 2, lineHeight: 16 },
   trade: { fontSize: 13.5, color: colors.inkMid, marginTop: 2 },
   region: { fontSize: 12, color: colors.inkLo, marginTop: 2 },
   editLink: { fontSize: 12.5, color: colors.blue, fontWeight: "700" },

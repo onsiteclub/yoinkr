@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { AdSlot } from "@/components/AdSlot";
 import { FeedCard } from "@/components/FeedCard";
 import { FeedCardWide } from "@/components/FeedCardWide";
 import { FeedFilterBar } from "@/components/FeedFilters";
@@ -17,6 +18,8 @@ import {
   type IncomingYoinks,
   type PendingRating,
 } from "@/data/repository";
+import { track } from "@/data/analytics";
+import { adForSlot } from "@/data/houseAds";
 import { REGIONS } from "@/data/regions";
 import type { Listing } from "@/data/types";
 import { useFeedFilter } from "@/store/useFeedFilter";
@@ -40,6 +43,7 @@ export default function FeedScreen() {
   const [incomingYoinks, setIncomingYoinks] = useState<IncomingYoinks[]>([]);
 
   const load = useCallback(() => {
+    track("feed_view", { type, category, city });
     getListings({ type, category, city }).then(setListings);
     getWeekendJobCount(city).then(setCount);
     // Reminder banners (both empty for guests): new yoinks on my jobs,
@@ -59,8 +63,10 @@ export default function FeedScreen() {
   // routes guests to welcome and returns false).
   const onAction = useCallback(async (listing: Listing) => {
     const isMine = listing.mine ?? false;
+    track("listing_action", { listing_type: listing.type, mine: isMine, status: listing.status });
     if (isMine && listing.type === "available") {
-      router.push("/post");
+      // My own ad → straight into the edit form (was a blank new-post form).
+      router.push({ pathname: "/post", params: { edit: listing.id } });
     } else if (isMine && listing.type === "job") {
       // My job → review who applied.
       router.push({ pathname: "/applicants/[id]", params: { id: listing.id } });
@@ -137,13 +143,18 @@ export default function FeedScreen() {
           ) : listings.length === 0 ? (
             <Text style={styles.empty}>No listings match this filter yet.</Text>
           ) : (
-            listings.map((l) =>
-              horizontalCards ? (
-                <FeedCardWide key={l.id} listing={l} onPressAction={onAction} onPressAuthor={onAuthor} />
-              ) : (
-                <FeedCard key={l.id} listing={l} onPressAction={onAction} onPressAuthor={onAuthor} />
-              )
-            )
+            // Kijiji-style monetization: an ad slot after every 3rd listing.
+            // Slots rotate through the pool (house ads today — see houseAds.ts).
+            listings.map((l, i) => (
+              <Fragment key={l.id}>
+                {horizontalCards ? (
+                  <FeedCardWide listing={l} onPressAction={onAction} onPressAuthor={onAuthor} />
+                ) : (
+                  <FeedCard listing={l} onPressAction={onAction} onPressAuthor={onAuthor} />
+                )}
+                {(i + 1) % 3 === 0 && <AdSlot ad={adForSlot((i + 1) / 3 - 1)} />}
+              </Fragment>
+            ))
           )}
         </View>
       </ScrollView>

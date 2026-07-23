@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { LogoMark } from "@/components/Logo";
 import { PressableScale } from "@/components/PressableScale";
+import { track } from "@/data/analytics";
 import { requestPasswordReset, signInWithEmail, signUpWithEmail } from "@/data/supabase";
 import { useResponsive } from "@/lib/responsive";
 import { colors } from "@/theme/colors";
@@ -67,9 +68,11 @@ export default function WelcomeScreen() {
     try {
       if (mode === "login") {
         await signInWithEmail(email.trim(), password);
+        track("login", { gated: !!gate });
         enter();
       } else {
         await signUpWithEmail(email.trim(), password);
+        track("signup", { gated: !!gate });
         // Fresh account → profile setup once, right now (skippable "Later").
         enter();
         router.push("/setup");

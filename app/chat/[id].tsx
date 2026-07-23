@@ -28,6 +28,7 @@ import {
   sendMessage,
   subscribeToThread,
 } from "@/data/repository";
+import { track } from "@/data/analytics";
 import { ensureUserId } from "@/data/supabase";
 import type { Application, ChatSummary, Deal, ThreadMessage } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
@@ -64,6 +65,7 @@ export default function ChatThreadScreen() {
       const c = await getChat(id);
       if (cancelled || !c) return;
       setChat(c);
+      track("chat_opened", { about_listing: !!c.listingId });
       if (c.listingId && c.otherId) {
         const d = await getDealWith(c.otherId, c.listingId);
         if (!cancelled && d) {
@@ -100,6 +102,7 @@ export default function ChatThreadScreen() {
   const onAcceptInChat = async () => {
     if (!pendingApp || !chat) return;
     const d = await acceptApplication(pendingApp);
+    track("accept", { where: "chat" });
     setDeal(d);
     setPendingApp(null);
     // Tell the other side right here, in realtime.
@@ -110,12 +113,14 @@ export default function ChatThreadScreen() {
   const onMarkDone = async () => {
     if (!deal) return;
     await markDealDone(deal.id);
+    track("deal_done");
     setDeal({ ...deal, state: "done" });
   };
 
   const onRate = async (stars: number, comment: string) => {
     if (!deal) return;
     await rateDeal(deal, stars, comment);
+    track("rating_sent", { stars });
     setIRated(true);
     setRatingOpen(false);
     // Both sides in → the loop is closed; refresh so the banner says "Rated".
@@ -136,6 +141,7 @@ export default function ChatThreadScreen() {
     if (!text || !chat) return;
     setDraft("");
     if (/(\+?\d[\d\s\-().]{6,}\d)/.test(text)) setPhoneNudge(true);
+    track("message_sent");
     const msg = await sendMessage(chat.conversationId, text);
     setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));

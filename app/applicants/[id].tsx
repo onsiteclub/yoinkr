@@ -6,6 +6,7 @@ import { Avatar } from "@/components/Avatar";
 import { PressableScale } from "@/components/PressableScale";
 import { TrustInline } from "@/components/TrustInline";
 import { Verified } from "@/components/Verified";
+import { track } from "@/data/analytics";
 import { categoryLabels } from "@/data/categories";
 import {
   acceptApplication,
@@ -44,6 +45,7 @@ export default function ApplicantsScreen() {
     setBusy(a.id);
     try {
       await acceptApplication(a);
+      track("accept", { where: "crew" });
       // Straight into the conversation — the deal banner lives there.
       const convId = await getOrCreateConversation(a.applicantId, a.listingId);
       router.push({ pathname: "/chat/[id]", params: { id: convId } });
@@ -57,6 +59,7 @@ export default function ApplicantsScreen() {
     setBusy(a.id);
     try {
       await declineApplication(a.id);
+      track("decline");
       load();
     } finally {
       setBusy(null);

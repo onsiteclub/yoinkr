@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { track } from "@/data/analytics";
 import { dropLegacyAnonSession } from "@/data/supabase";
 import { colors } from "@/theme/colors";
 
@@ -14,6 +15,7 @@ import { colors } from "@/theme/colors";
 export default function RootLayout() {
   useEffect(() => {
     void dropLegacyAnonSession();
+    track("app_open");
   }, []);
 
   const [fontsLoaded] = useFonts({
@@ -43,6 +45,8 @@ export default function RootLayout() {
           <Stack.Screen name="applicants/[id]" />
           <Stack.Screen name="apply/[id]" options={{ presentation: "modal" }} />
           <Stack.Screen name="post" options={{ presentation: "modal" }} />
+          <Stack.Screen name="my-ads" />
+          <Stack.Screen name="verify" options={{ presentation: "modal" }} />
           <Stack.Screen name="region" options={{ presentation: "modal" }} />
           <Stack.Screen name="setup" options={{ presentation: "modal", gestureEnabled: false }} />
         </Stack>

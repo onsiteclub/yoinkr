@@ -5,7 +5,7 @@ import { AccountGate } from "@/components/AccountGate";
 import { Avatar } from "@/components/Avatar";
 import { Header } from "@/components/Header";
 import { PressableScale } from "@/components/PressableScale";
-import { getChats } from "@/data/repository";
+import { getChats, subscribeToInbox } from "@/data/repository";
 import { hasAccount } from "@/data/supabase";
 import type { ChatSummary } from "@/data/types";
 import { useResponsive } from "@/lib/responsive";
@@ -20,13 +20,19 @@ export default function MessagesScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      let unsubscribe: (() => void) | undefined;
       hasAccount().then((ok) => {
         setSignedIn(ok);
         if (!ok) return;
         getChats()
           .then(setChats)
           .finally(() => setLoaded(true));
+        // New messages while sitting on the tab → refresh the list live.
+        unsubscribe = subscribeToInbox(() => {
+          getChats().then(setChats).catch(() => {});
+        });
       });
+      return () => unsubscribe?.();
     }, [])
   );
 

@@ -71,10 +71,19 @@ async function statsFor(ids: string[]): Promise<Record<string, ProfileStats>> {
   return map;
 }
 
+// Public display name: the nickname wins when set (lots of people don't want
+// their real name in a public feed); the real name stays for the edit screen.
+function displayName(row: any): string {
+  const nick = typeof row?.nickname === "string" ? row.nickname.trim() : "";
+  return nick || row?.full_name || "—";
+}
+
 function mapProfile(row: any, stats: ProfileStats): Profile {
   return {
     id: row.id,
     fullName: row.full_name,
+    nickname: row.nickname ?? null,
+    publicName: displayName(row),
     avatarUrl: row.avatar_url ?? null,
     categories: (row.categories ?? []) as CategoryId[],
     hires: !!row.hires,
@@ -118,6 +127,7 @@ function mapListing(row: any, myId: string | null, stats: Record<string, Profile
     pay: payLabel(row.pay_model ?? null, row.rate != null ? Number(row.rate) : null),
     title: row.title,
     detail,
+    rawDetail: row.detail ?? "",
     description: row.description ?? "",
     city: row.city,
     location: row.location,
@@ -128,7 +138,7 @@ function mapListing(row: any, myId: string | null, stats: Record<string, Profile
     createdAt: row.created_at,
     when: timeAgo(row.created_at),
     author: {
-      fullName: row.author?.full_name ?? "—",
+      fullName: displayName(row.author),
       avatarUrl: row.author?.avatar_url ?? null,
       trustScore: s.trustScore,
       dealsClosed: s.dealsClosed,
@@ -142,7 +152,7 @@ function mapListing(row: any, myId: string | null, stats: Record<string, Profile
 }
 
 const LISTING_SELECT =
-  "*, author:profiles(full_name,verified,avatar_url), applications(applicant_id)";
+  "*, author:profiles(full_name,nickname,verified,avatar_url), applications(applicant_id)";
 
 // ---- Profile ----
 
@@ -156,6 +166,7 @@ export async function getMyProfile(): Promise<Profile> {
 
 export async function updateMyProfile(input: {
   fullName: string;
+  nickname: string | null;
   categories: CategoryId[];
   hires: boolean;
   yearsExp: number;
@@ -168,6 +179,7 @@ export async function updateMyProfile(input: {
     .from("profiles")
     .update({
       full_name: input.fullName,
+      nickname: input.nickname?.trim() || null,
       categories: input.categories,
       hires: input.hires,
       years_exp: input.yearsExp,
@@ -194,6 +206,15 @@ export function isProfileIncomplete(p: Profile): boolean {
 export async function setAvatar(url: string): Promise<void> {
   const uid = await ensureUserId();
   const { error } = await supabase.from("profiles").update({ avatar_url: url }).eq("id", uid);
+  if (error) throw error;
+}
+
+// Flip the verified badge on after the person proves they own their email
+// (OTP code round-trip — see app/verify.tsx). Client-set for the tester
+// phase; the durable fix is a server-side trigger (noted in the backlog).
+export async function markVerified(): Promise<void> {
+  const uid = await ensureUserId();
+  const { error } = await supabase.from("profiles").update({ verified: true }).eq("id", uid);
   if (error) throw error;
 }
 
@@ -240,14 +261,14 @@ export async function getPortfolio(profileId: string): Promise<PortfolioPhoto[]>
 export async function getReferences(profileId: string): Promise<Reference[]> {
   const { data, error } = await supabase
     .from("ratings")
-    .select("*, rater:profiles!ratings_rater_id_fkey(full_name)")
+    .select("*, rater:profiles!ratings_rater_id_fkey(full_name,nickname)")
     .eq("ratee_id", profileId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((r: any) => ({
     id: r.id,
     profileId: r.ratee_id,
-    raterName: r.rater?.full_name ?? "—",
+    raterName: displayName(r.rater),
     stars: r.stars,
     comment: r.comment ?? "",
     when: timeAgo(r.created_at),
@@ -357,12 +378,56 @@ export async function createListing(input: NewListing): Promise<Listing> {
   return mapListing(data, uid, stats);
 }
 
+// Everything I posted, newest first, whatever the status — the "My ads" view.
+// Feed queries filter by city; here the author is the filter.
+export async function getMyListings(): Promise<Listing[]> {
+  const uid = await ensureUserId();
+  const { data, error } = await supabase
+    .from("listings")
+    .select(LISTING_SELECT)
+    .eq("author_id", uid)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const stats = await statsFor([uid]);
+  return (data ?? []).map((r) => mapListing(r, uid, stats));
+}
+
+// Edit my own ad (RLS listings_update restricts this to the author). Same
+// shape as createListing so the post form serves both create and edit.
+export async function updateListing(id: string, input: NewListing): Promise<Listing> {
+  const uid = await ensureUserId();
+  const { data, error } = await supabase
+    .from("listings")
+    .update({
+      type: input.type,
+      category: input.category,
+      pay_model: input.payModel,
+      rate: input.rate,
+      sqft: input.sqft,
+      crew_size: input.crewSize,
+      title: input.title,
+      detail: input.detail,
+      description: input.description,
+      city: input.city,
+      location: input.location,
+      urgent: input.urgent,
+      photo_url: input.photoUrl,
+    })
+    .eq("id", id)
+    .eq("author_id", uid)
+    .select(LISTING_SELECT)
+    .single();
+  if (error) throw error;
+  const stats = await statsFor([uid]);
+  return mapListing(data, uid, stats);
+}
+
 // ---- Applications (worker → job proposals) ----
 
 export async function getApplications(listingId: string): Promise<Application[]> {
   const { data, error } = await supabase
     .from("applications")
-    .select("*, applicant:profiles(full_name,categories,years_exp,verified,avatar_url)")
+    .select("*, applicant:profiles(full_name,nickname,categories,years_exp,verified,avatar_url)")
     .eq("listing_id", listingId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -380,7 +445,7 @@ export async function getApplications(listingId: string): Promise<Application[]>
       when: timeAgo(a.created_at),
       createdAt: a.created_at,
       applicant: {
-        fullName: a.applicant?.full_name ?? "—",
+        fullName: displayName(a.applicant),
         avatarUrl: a.applicant?.avatar_url ?? null,
         categories: (a.applicant?.categories ?? []) as CategoryId[],
         yearsExp: a.applicant?.years_exp ?? 0,
@@ -432,7 +497,7 @@ export async function getPendingApplicationFrom(
 ): Promise<Application | undefined> {
   const { data, error } = await supabase
     .from("applications")
-    .select("*, applicant:profiles(full_name,categories,years_exp,verified,avatar_url)")
+    .select("*, applicant:profiles(full_name,nickname,categories,years_exp,verified,avatar_url)")
     .eq("listing_id", listingId)
     .eq("applicant_id", applicantId)
     .eq("status", "pending")
@@ -450,7 +515,7 @@ export async function getPendingApplicationFrom(
     when: timeAgo(a.created_at),
     createdAt: a.created_at,
     applicant: {
-      fullName: a.applicant?.full_name ?? "—",
+      fullName: displayName(a.applicant),
       avatarUrl: a.applicant?.avatar_url ?? null,
       categories: (a.applicant?.categories ?? []) as CategoryId[],
       yearsExp: a.applicant?.years_exp ?? 0,
@@ -569,9 +634,12 @@ export async function getPendingRatings(): Promise<PendingRating[]> {
   const pending = deals.filter((d) => !rated.has(d.id));
   if (pending.length === 0) return [];
   const otherIds = pending.map((d) => (d.workerId === uid ? d.hirerId : d.workerId));
-  const { data: profs } = await supabase.from("profiles").select("id,full_name").in("id", otherIds);
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("id,full_name,nickname")
+    .in("id", otherIds);
   const names: Record<string, string> = Object.fromEntries(
-    (profs ?? []).map((p: any) => [p.id, p.full_name])
+    (profs ?? []).map((p: any) => [p.id, displayName(p)])
   );
   return pending.map((d) => {
     const otherId = d.workerId === uid ? d.hirerId : d.workerId;
@@ -619,7 +687,7 @@ export async function rateDeal(deal: Deal, stars: number, comment: string): Prom
 export async function getVouches(profileId: string): Promise<Vouch[]> {
   const { data, error } = await supabase
     .from("vouches")
-    .select("*, voucher:profiles!vouches_voucher_id_fkey(full_name,verified,avatar_url)")
+    .select("*, voucher:profiles!vouches_voucher_id_fkey(full_name,nickname,verified,avatar_url)")
     .eq("vouchee_id", profileId)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -633,7 +701,7 @@ export async function getVouches(profileId: string): Promise<Vouch[]> {
     comment: v.comment ?? "",
     when: timeAgo(v.created_at),
     voucher: {
-      fullName: v.voucher?.full_name ?? "—",
+      fullName: displayName(v.voucher),
       avatarUrl: v.voucher?.avatar_url ?? null,
       trustScore: (stats[v.voucher_id] ?? NO_STATS).trustScore,
       verified: !!v.voucher?.verified,
@@ -705,8 +773,8 @@ export async function reportUser(
 // ---- Chat (Supabase + Realtime) ----
 
 const CONV_SELECT = `*,
-  a:profiles!conversations_participant_a_fkey(id,full_name,avatar_url),
-  b:profiles!conversations_participant_b_fkey(id,full_name,avatar_url),
+  a:profiles!conversations_participant_a_fkey(id,full_name,nickname,avatar_url),
+  b:profiles!conversations_participant_b_fkey(id,full_name,nickname,avatar_url),
   listing:listings(id,title,detail,pay_model,rate),
   messages(body,sender_id,created_at)`;
 
@@ -721,8 +789,8 @@ function mapChat(row: any, uid: string, stats: Record<string, ProfileStats>): Ch
     conversationId: row.id,
     otherId: other?.id ?? "",
     listingId: row.listing_id ?? null,
-    name: other?.full_name ?? "—",
-    avatar: (other?.full_name ?? "?")[0],
+    name: displayName(other),
+    avatar: displayName(other)[0] ?? "?",
     avatarUrl: other?.avatar_url ?? null,
     trust: (stats[other?.id] ?? NO_STATS).trustScore,
     lastMessage: last?.body ?? "Say hi 👋",
@@ -847,6 +915,23 @@ export async function markRead(conversationId: string): Promise<void> {
     .update({ b_last_read: now })
     .eq("id", conversationId)
     .eq("participant_b", uid);
+}
+
+// Any new message visible to me (RLS scopes the stream to my conversations)
+// → the Messages tab re-queries its list, so incoming yoinks/chats appear
+// while the person is sitting on the tab. Returns an unsubscribe fn.
+export function subscribeToInbox(onChange: () => void): () => void {
+  const channel = supabase
+    .channel("inbox")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "yoinkr", table: "messages" },
+      () => onChange()
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // Live INSERT stream for one conversation. Returns an unsubscribe fn.

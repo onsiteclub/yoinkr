@@ -77,16 +77,13 @@ export function FeedCard({
           <LocationLine listing={listing} />
         </View>
 
+        {/* Density cut (2026-07-22): the long description lives on the ad's
+            own screens (apply/chat), not on the card — title + pay + place
+            decide the tap. */}
         <View style={styles.metaRow}>
           <Text style={styles.pay}>{listing.pay}</Text>
           <Text style={styles.detail}>· {listing.detail}</Text>
         </View>
-
-        {!!listing.description && (
-          <Text numberOfLines={2} style={styles.desc}>
-            {listing.description}
-          </Text>
-        )}
 
         <View style={styles.footer}>
           <PressableScale style={styles.author} onPress={() => onPressAuthor?.(listing)}>
@@ -138,7 +135,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: 16,
-    marginBottom: 11,
+    // Breathing room between cards — tight stacking read as one long blur.
+    marginBottom: 18,
     overflow: "hidden",
   },
   lifeBar: { paddingVertical: 6, alignItems: "center" },
@@ -154,7 +152,6 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   pay: { fontFamily: fonts.display, fontSize: 19, fontWeight: "800", color: colors.ink },
   detail: { fontSize: 12.5, color: colors.inkMid },
-  desc: { fontSize: 12.5, color: colors.inkMid, lineHeight: 17, marginTop: -4, marginBottom: 12 },
   footer: {
     flexDirection: "row",
     alignItems: "center",
