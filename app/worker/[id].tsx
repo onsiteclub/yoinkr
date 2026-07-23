@@ -6,13 +6,9 @@ import { Avatar } from "@/components/Avatar";
 import { CategoryPhoto, SamplePill, categoryPhotoCount } from "@/components/CategoryPhoto";
 import { Placeholder } from "@/components/Placeholder";
 import { PressableScale } from "@/components/PressableScale";
+import { ProfileGlance } from "@/components/ProfileGlance";
 import { Verified } from "@/components/Verified";
-import {
-  CATEGORIES,
-  type CategoryId,
-  categoryLabel,
-  roleLabel,
-} from "@/data/categories";
+import { CATEGORIES, type CategoryId, categoryLabel } from "@/data/categories";
 import {
   addVouch,
   getOrCreateConversation,
@@ -66,7 +62,6 @@ export default function WorkerProfileScreen() {
     return <View style={styles.screen} />;
   }
 
-  const hasScore = profile.trustScore != null;
   const artCategory = profile.categories[0] ?? null;
 
   const onVouch = async (category: CategoryId, comment: string) => {
@@ -107,11 +102,6 @@ export default function WorkerProfileScreen() {
               <Text style={styles.name}>{profile.publicName}</Text>
               {profile.verified && <Verified />}
             </View>
-            <Text style={styles.trade}>
-              {roleLabel(profile.categories, profile.hires) || "—"}
-              {profile.categories.length > 0 ? ` · ${profile.yearsExp} yrs` : ""}
-              {profile.crewSize === 2 && profile.categories.length > 0 ? " · duo" : ""}
-            </Text>
             <Text style={styles.region}>📍 {profile.region}</Text>
           </View>
           {profile.available && (
@@ -121,31 +111,9 @@ export default function WorkerProfileScreen() {
           )}
         </View>
 
-        {/* trust summary — avg only exists at 3+ ratings (server rule) */}
-        <View style={styles.trustBadge}>
-          <View style={styles.trustScoreCol}>
-            {hasScore ? (
-              <>
-                <Text style={styles.trustScore}>{profile.trustScore!.toFixed(1)}</Text>
-                <Text style={styles.trustStars}>{stars(profile.trustScore!)}</Text>
-              </>
-            ) : (
-              <Text style={styles.newBadge}>NEW</Text>
-            )}
-          </View>
-          <View style={styles.trustText}>
-            <Text style={styles.trustTitle}>
-              {hasScore ? "Trusted" : profile.ratingCount > 0 ? "Building reputation" : "New on Yoinkr"}
-            </Text>
-            <Text style={styles.trustBody}>
-              {hasScore
-                ? `${profile.dealsClosed} jobs closed in-app · rated by real hirers`
-                : profile.ratingCount > 0
-                  ? `${profile.ratingCount} rating${profile.ratingCount > 1 ? "s" : ""} so far — the average shows at 3`
-                  : `${profile.yearsExp} yrs of experience — no in-app deals yet`}
-            </Text>
-          </View>
-        </View>
+        {/* at-a-glance: stars · closed · years + category chips (2026-07-23
+            redesign — prose trust box retired, numbers speak) */}
+        <ProfileGlance profile={profile} />
 
         {/* actions */}
         {!isMe && (
@@ -173,6 +141,27 @@ export default function WorkerProfileScreen() {
               </Text>
             </PressableScale>
           </View>
+        )}
+
+        {/* photos first — the eye decides here (redesign 2026-07-23) */}
+        {(portfolio.length > 0 || artCategory) && (
+          <>
+            <Text style={styles.sectionTitle}>Work photos</Text>
+            <View style={styles.grid}>
+              {portfolio.length > 0
+                ? portfolio.map((p) => (
+                    <Placeholder key={p.id} photoUrl={p.photoUrl} style={styles.gridItem}>
+                      <Text style={styles.gridLabel}>{p.caption}</Text>
+                    </Placeholder>
+                  ))
+                : artCategory &&
+                  Array.from({ length: categoryPhotoCount(artCategory) }, (_, v) => (
+                    <CategoryPhoto key={v} category={artCategory} variant={v} style={styles.gridItem}>
+                      <SamplePill />
+                    </CategoryPhoto>
+                  ))}
+            </View>
+          </>
         )}
 
         {/* vouches — named, with the category they stand behind */}
@@ -220,32 +209,6 @@ export default function WorkerProfileScreen() {
           ))
         )}
 
-        {/* portfolio — category-default art when the worker hasn't added photos */}
-        {(portfolio.length > 0 || artCategory) && (
-          <>
-            <Text style={styles.sectionTitle}>Work photos</Text>
-            <View style={styles.grid}>
-              {portfolio.length > 0
-                ? portfolio.map((p) => (
-                    <Placeholder key={p.id} photoUrl={p.photoUrl} style={styles.gridItem}>
-                      <Text style={styles.gridLabel}>{p.caption}</Text>
-                    </Placeholder>
-                  ))
-                : artCategory &&
-                  Array.from({ length: categoryPhotoCount(artCategory) }, (_, v) => (
-                    <CategoryPhoto key={v} category={artCategory} variant={v} style={styles.gridItem}>
-                      <SamplePill />
-                    </CategoryPhoto>
-                  ))}
-            </View>
-            {portfolio.length === 0 && artCategory && (
-              <Text style={styles.sampleNote}>
-                Sample {categoryLabel(artCategory)} images — {profile.publicName.split(" ")[0]} hasn’t
-                added work photos yet.
-              </Text>
-            )}
-          </>
-        )}
       </ScrollView>
 
       <VouchModal
@@ -365,7 +328,6 @@ const styles = StyleSheet.create({
   },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   name: { fontSize: 20, fontWeight: "700", color: colors.ink },
-  trade: { fontSize: 13.5, color: colors.inkMid, marginTop: 2 },
   region: { fontSize: 12, color: colors.inkLo, marginTop: 2 },
   availablePill: {
     backgroundColor: colors.goodBg,
@@ -376,35 +338,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   availableText: { fontSize: 9.5, fontWeight: "800", color: colors.good, letterSpacing: 0.5 },
-  trustBadge: {
-    margin: 14,
-    marginBottom: 0,
-    backgroundColor: colors.goodBg,
-    borderWidth: 1,
-    borderColor: colors.goodLine,
-    borderRadius: 12,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  trustScoreCol: { alignItems: "center", minWidth: 56 },
-  trustScore: { fontFamily: fonts.display, fontSize: 30, fontWeight: "800", color: colors.good },
-  trustStars: { fontSize: 14, color: colors.good, marginTop: 1 },
-  newBadge: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.safetyInk,
-    backgroundColor: colors.safetyBg,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    overflow: "hidden",
-    letterSpacing: 1,
-  },
-  trustText: { flex: 1, borderLeftWidth: 1, borderLeftColor: colors.goodLine, paddingLeft: 14 },
-  trustTitle: { fontSize: 13, fontWeight: "700", color: "#0a6b41" },
-  trustBody: { fontSize: 11.5, color: "#3c7a5a", marginTop: 2, lineHeight: 16 },
   actionRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 14 },
   messageBtn: {
     flex: 1,
@@ -478,7 +411,6 @@ const styles = StyleSheet.create({
     padding: 9,
   },
   gridLabel: { fontSize: 11, color: colors.white, fontWeight: "700", textShadowColor: "rgba(0,0,0,.4)", textShadowRadius: 3 },
-  sampleNote: { paddingHorizontal: 18, paddingTop: 8, fontSize: 10.5, color: colors.inkLo, lineHeight: 15 },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(30,27,24,0.45)",
