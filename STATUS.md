@@ -30,6 +30,7 @@ Fase de testers reais aberta. Tudo documentado em **TESTING.md** (coleta, purga,
 - **Telemetria**: `analytics.events` exposto no PostgREST e instrumentado no app (20 eventos de jornada, fire-and-forget, client só escreve). Descarte: `delete from analytics.events where app='yoinkr'`.
 - **Frota de bots (blind test)**: 5 personas (3 workers, 2 hirers) + 4 anúncios; quem é bot só existe em `yoinkr.bots` (sem policy de leitura). Triggers pg_net → edge functions `bot-reply` (responde na persona, aceita yoink quando a conversa fecha) e `bot-engage` (engaja anúncio novo de humano; avalia deal done). Migration `20260722120000_yoinkr_bot_fleet.sql` aplicada; functions deployadas; smoke test vivo OK (Junior Silva yoinkou o job real de strapping com contra-proposta).
 - **Purga da frota**: `delete from auth.users where email like '%@bot.yoinkr.test'`.
+- **Email de mensagem nova (Kijiji model)**: trigger em `messages` → function `notify-message` → Resend. Throttle 30 min/conversa, skip se o destinatário leu a thread há <3 min, bots nunca recebem. Testado vivo. CTA "Reply on Yoinkr" espera o secret `APP_URL` (domínio em aberto). Push nativo = fase 2 (EAS + FCM/APNs; Expo Go não suporta).
 
 ## A visão (decidida pelo founder, 2026-07-18)
 

@@ -76,9 +76,23 @@ Depois, opcional: dropar triggers + tabela via migration de rollback.
   própria + tela de consentimento opt-in no app. Não construído ainda — de
   propósito.
 
-## 4. O que NÃO está ligado
+## 4. Notificações
 
-- Nenhum email é disparado ao tester além dos de auth (código/reset).
+- **Email de mensagem nova (Kijiji model, ligado 2026-07-22):** mensagem chega
+  → o destinatário recebe email (`Yoinkr <contact@onsiteclub.ca>`, via Resend)
+  com remetente, anúncio em questão e trecho da mensagem. Guardas: máx. 1
+  email por conversa/destinatário a cada 30 min; quem leu a thread nos
+  últimos 3 min não recebe; bots nunca recebem. Function `notify-message` +
+  trigger em `yoinkr.messages`. O botão "Reply on Yoinkr" só aparece quando o
+  secret `APP_URL` for definido (domínio ainda não decidido):
+  `npx supabase secrets set APP_URL=https://<url> --project-ref tuxtzfmzhmgasqzugyod`.
+- **Push no celular:** não ligado — exige build nativo (EAS) com FCM/APNs;
+  não funciona em Expo Go (SDK 53+) nem no web sem service worker. Decisão
+  de fase 2.
+
+## 5. O que NÃO está ligado
+
+- Nenhum outro email além dos de auth (código/reset) e do de mensagem nova.
 - Bots não iniciam conversa do nada — só reagem (mensagem recebida, anúncio
   novo, deal done).
 - Bots não conversam entre si (guard no trigger).
